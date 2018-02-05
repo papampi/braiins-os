@@ -15,10 +15,10 @@ class CommandManager:
         self._args = None
         self._builder = None
 
-    def set_args(self, args):
+    def set_args(self, argv, args):
         config = lede.load_config(args.config)
         self._args = args
-        self._builder = lede.Builder(config)
+        self._builder = lede.Builder(config, argv)
 
     def prepare(self):
         logging.debug("Called command 'prepare'")
@@ -42,7 +42,7 @@ class CommandManager:
     def build(self):
         logging.debug("Called command 'build'")
         self._builder.prepare()
-        self._builder.build()
+        self._builder.build(targets=self._args.target, verbose=self._args.verbose)
 
     def deploy(self):
         logging.debug("Called command 'deploy'")
@@ -104,6 +104,12 @@ def main(argv):
                                       help="build image for current configuration")
     subparser.set_defaults(func=command.build)
 
+    subparser.add_argument('-v', '--verbose', action='store_true',
+                           help='show all commands during build process')
+
+    subparser.add_argument('target', nargs='*',
+                           help='build only specific targets when specified')
+
     # create the parser for the "deploy" command
     subparser = subparsers.add_parser('deploy',
                                       help="deploy selected image to target device")
@@ -147,7 +153,7 @@ def main(argv):
     logging.basicConfig(level=getattr(logging, args.log.upper()), handlers=[handler])
 
     # set arguments
-    command.set_args(args)
+    command.set_args(argv, args)
 
     # call sub-command
     args.func()

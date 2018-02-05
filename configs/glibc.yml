@@ -10,9 +10,13 @@ build:
     # specifies the number of jobs to run simultaneously
     jobs: 4
     # show all commands during build process
-    debug: no
+    verbose: no
     # path to Xilinx SDK
     xilinx_sdk: ~/opt/xilinx/SDK/2017.2
+    # target aliases for LEDE build system
+    aliases:
+        kernel: target/linux
+        cgminer: package/utils/cgminer
 
 remote:
     # default branch for repositories

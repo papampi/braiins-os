@@ -36,15 +36,18 @@ class Builder:
     FEEDS_CONF_DST = 'feeds.conf'
     CONFIG_NAME = '.config'
 
-    def __init__(self, config):
+    def __init__(self, config, argv):
         """
         Initialize builder for specific configuration
 
         :param config:
             Configuration object which has its attributes stored in dictionary or list.
             The key of dictionary can be also accessed as an object attribute.
+        :param argv:
+            Command line arguments for better help printing.
         """
         self._config = config
+        self._argv = argv
         self._build_dir = os.path.join(os.path.abspath(config.build.dir), config.build.name)
         self._working_dir = None
         self._repos = OrderedDict()
@@ -365,7 +368,7 @@ class Builder:
             logging.info("Start Linux kernel configuration...'")
             self._config_kernel()
 
-    def build(self):
+    def build(self, targets=None, verbose=False):
         """
         Build the Miner firmware for current configuration
 
@@ -373,17 +376,26 @@ class Builder:
 
         - `build.jobs` - number of jobs to run simultaneously (default is `1`)
         - `build.debug` - show all commands during build process (default is `no`)
+
+        :param targets:
+            List of targets for build. Target is specified as an alias to real LEDE target.
+            The aliases are stored in configuration file under `build.aliases`
+        :param verbose:
+            Force to show all commands called from make build system.
         """
         logging.info("Start building LEDE...'")
         jobs = self._config.build.get('jobs', 1)
-        debug = self._config.build.get('debug', 'no') == 'yes'
+        verbose = verbose or self._config.build.get('verbose', 'no') == 'yes'
         xilinx_sdk = os.path.abspath(os.path.expanduser(self._config.build.xilinx_sdk))
         xilinx_bin = os.path.join(xilinx_sdk, 'bin')
 
         # prepare arguments for build
         args = ['make', '-j{}'.format(jobs)]
-        if debug:
+        if verbose:
             args.append('V=s')
+        if targets:
+            aliases = self._config.build.aliases
+            args.extend('{}/install'.format(aliases[target]) for target in targets)
         # run make to build whole LEDE
         self._run(args, path=[xilinx_bin])
 
@@ -476,7 +488,7 @@ class Builder:
         env_path = os.environ.get('PATH', '')
 
         sys.stderr.write('# set environment with command:\n')
-        sys.stderr.write('# eval $(./lede.py toolchain 2>/dev/null)\n')
+        sys.stderr.write('# eval $(./lede.py {} 2>/dev/null)\n'.format(' '.join(self._argv)))
         sys.stdout.write('TARGET="{}";\n'.format(target_dir))
         sys.stdout.write('TOOLCHAIN="{}";\n'.format(toolchain_dir))
         sys.stdout.write('export STAGING_DIR="${TARGET}";\n')
