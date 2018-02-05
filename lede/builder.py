@@ -128,6 +128,16 @@ class Builder:
         config_dst_path = os.path.join(lede_dir, self.CONFIG_NAME)
         return config_src_path, config_dst_path
 
+    def _use_glibc(self):
+        """
+        Check if glibc is used for build
+
+        :return: True when configuration file is set for use of glibc.
+        """
+        config_path, _ = self._get_config_paths()
+        with open(config_path, 'r') as config:
+            return any((line.startswith('CONFIG_LIBC="glibc"') for line in config))
+
     def _init_repos(self):
         """
         Initialize all repositories specified in configuration file
@@ -439,9 +449,17 @@ class Builder:
         projects.
         """
         logging.info("Preparing toolchain environment...'")
+
+        if self._use_glibc():
+            target_name = 'target-arm_cortex-a9+neon_glibc-2.24_eabi'
+            toolchain_name = 'toolchain-arm_cortex-a9+neon_gcc-5.4.0_glibc-2.24_eabi'
+        else:
+            target_name = 'target-arm_cortex-a9+neon_musl-1.1.16_eabi'
+            toolchain_name = 'toolchain-arm_cortex-a9+neon_gcc-5.4.0_musl-1.1.16_eabi'
+
         staging_dir = os.path.join(self._working_dir, 'staging_dir')
-        target_dir = os.path.join(staging_dir, 'target-arm_cortex-a9+neon_musl-1.1.16_eabi')
-        toolchain_dir = os.path.join(staging_dir, 'toolchain-arm_cortex-a9+neon_gcc-5.4.0_musl-1.1.16_eabi')
+        target_dir = os.path.join(staging_dir, target_name)
+        toolchain_dir = os.path.join(staging_dir, toolchain_name)
 
         if not os.path.exists(target_dir):
             msg = "Target directory '{}' does not exist".format(target_dir)
