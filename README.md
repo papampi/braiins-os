@@ -25,6 +25,7 @@ The Miner build system is written in *Python 3.5.3* and it also requires followi
 * termcolor 1.1.0
 * colorlog 2.10.0
 * progress 1.2
+* Paramiko 2.0
 
 ### Installing
 

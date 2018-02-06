@@ -5,11 +5,12 @@ import git
 import os
 import sys
 
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 from termcolor import colored
 
-from .config import RemoteWalker
-from .repo import RepoProgressPrinter
+from lede.config import RemoteWalker
+from lede.repo import RepoProgressPrinter
+from lede.ssh import SSHManager
 
 
 class BuilderStop(Exception):
@@ -140,6 +141,16 @@ class Builder:
         config_path, _ = self._get_config_paths()
         with open(config_path, 'r') as config:
             return any((line.startswith('CONFIG_LIBC="glibc"') for line in config))
+
+    def _get_hostname(self) -> str:
+        """
+        Return hostname derived from miner MAC address
+
+        :return:
+            Miner hostname for current configuration.
+        """
+        mac = self._config.miner.mac
+        return 'miner-' + ''.join(mac.split(':')[-3:]).lower()
 
     def _init_repos(self):
         """
@@ -399,11 +410,81 @@ class Builder:
         # run make to build whole LEDE
         self._run(args, path=[xilinx_bin])
 
+    def _write_uenv(self, stream):
+        """
+        Generate content of uEnv.txt to the file stream
+
+        :param stream:
+            File stream with write access.
+        """
+        stream.write("bootargs=console=ttyPS0,115200 root=/dev/ram0 r rootfstype=squashfs earlyprintk\n")
+        stream.write("ethaddr={}\n".format(self._config.miner.mac))
+
+    def _deploy_ssh_sd(self, image):
+        """
+        Deploy image to the SD card over SSH connection
+
+        :param image:
+            Paths to firmware images.
+        """
+        hostname = self._config.deploy.ssh.get('hostname', None)
+        password = self._config.deploy.ssh.get('password', None)
+        username = self._config.deploy.ssh.username
+
+        if not hostname:
+            # when hostname is not set, use standard name derived from MAC address
+            hostname_suffix = self._config.deploy.ssh.get('hostname_suffix', '')
+            hostname = self._get_hostname() + hostname_suffix
+
+        with SSHManager(hostname, username, password) as ssh:
+            sftp = ssh.open_sftp()
+
+            # prepare partition 1
+            ssh.run('mount', '/dev/mmcblk0p1', '/mnt')
+            sftp.chdir('/mnt')
+
+            logging.info("Creating 'uEnv.txt'...")
+            with sftp.open('uEnv.txt', 'w') as file:
+                self._write_uenv(file)
+
+            logging.info("Loading 'BOOT.bin'...")
+            sftp.put(image.boot_bin, 'BOOT.bin')
+            logging.info("Loading 'fit.itb'...")
+            sftp.put(image.fit_itb, 'fit.itb')
+            ssh.run('umount', '/mnt')
+
+            # prepare partition 1
+            ssh.run('mount', '/dev/mmcblk0p2', '/mnt')
+            sftp.chdir('/mnt')
+            if self._config.deploy.remove_uuid == 'yes' and ('.extroot-uuid' in sftp.listdir('etc')):
+                logging.info("Removing extroot UUID...")
+                sftp.remove('etc/.extroot-uuid')
+            ssh.run('umount', '/mnt')
+
+            # reboot system if requested
+            if self._config.deploy.reboot == 'yes':
+                ssh.run('reboot')
+
     def deploy(self):
         """
         Deploy Miner firmware to target platform
         """
-        pass
+        Image = namedtuple('Image', ['boot_bin', 'fit_itb'])
+
+        target = self._config.deploy.target
+
+        logging.info("Start deploying Miner firmware...")
+
+        generic_dir = os.path.join(self._working_dir, 'bin', 'targets', 'zynq', 'generic')
+        image = Image(
+            boot_bin=os.path.join(generic_dir, 'uboot-zynq-miner', 'BOOT.bin'),
+            fit_itb=os.path.join(generic_dir, 'lede-zynq-miner-squashfs-fit.itb')
+        )
+
+        if target == 'sd':
+            self._deploy_ssh_sd(image)
+        else:
+            logging.error("Unsupported target '{}' for firmware image".format(target))
 
     def status(self):
         """

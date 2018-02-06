@@ -139,7 +139,8 @@ class ConfigWrapper:
         :return:
             Value of item or default value when item is not set.
         """
-        return self[item] if item in self else default
+        value = self._root[item] if item in self._root else None
+        return value if value is not None else default
 
     def items(self):
         """

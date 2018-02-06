@@ -1,3 +1,7 @@
+miner:
+    # default miner MAC address
+    mac: 00:0A:35:FF:FF:FF
+
 build:
     # name of subdirectory in the build directory
     name: devel
@@ -43,3 +47,21 @@ feeds:
     update_always: no
     # always install feeds
     install_always: no
+
+deploy:
+    # default target NAND or SD card
+    target: sd
+    # reboot miner after successful deploy
+    reboot: yes
+    # remove UUID from SD card
+    remove_uuid: yes
+
+    # setting for deploy over SSH connection
+    ssh:
+        # hostname suffix which is appended to generated hostname 'miner-xxyyzz'
+        # where xxyyzz are last three numbers from MAC address
+        hostname_suffix: .bo
+        # ssh username
+        username: root
+        # ssh password
+        password:
