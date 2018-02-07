@@ -57,7 +57,7 @@ under *build.name* attribute.
 ## Development
 
 Default configuration for development has disabled automatic fetching/merging of remote repositories when *build*
-command is executed. But it can be used *prepare* command instead when synchronization with remote is needed.
+command is executed. The *prepare* command can be used instead when synchronization with remote is needed.
 
 ```commandline
 # force fetching from remote repositories
@@ -67,7 +67,7 @@ $ ./lede.py prepare --fetch
 It is possible to clean all project with two options. Simple execution of *clean* command use LEDE *make clean* to clean
 the whole build system. It does not guarantee that all files will be in its initial state. The second option use git
 command to clean all repositories and after that run initialization phase again. This option removes all untracked files
-and must be called with cautious!
+and must be called with caution!
 
 ```commandline
 # clean repositories with LEDE make clean
@@ -86,8 +86,8 @@ it is executed on all repositories.
 $ ./lede.py status
 ```
 
-Rather then executing the whole LEDE build system which can be slow, it can be used standard *make* of developed
-subproject (e.g. CGMiner) with LEDE toolchain. Environment variables must be set correctly for use LEDE toolchain in
+Rather than executing the whole LEDE build system which can be slow, standard *make* of developed
+subproject (e.g. CGMiner) can be used with LEDE toolchain. Environment variables must be set correctly for use LEDE toolchain in
 out-of-tree projects. For this purpose, the *toolchain* command is provided.
 
 ```commandline
@@ -95,12 +95,12 @@ out-of-tree projects. For this purpose, the *toolchain* command is provided.
 $ eval $(./lede.py toolchain 2>/dev/null)
 ```
 
-It is used standard LEDE menuconfig for firmware image configuration. When some changes are detected then configuration
+We use standard LEDE menuconfig for firmware image configuration. When some changes are detected then configuration
 difference is saved to the file specified in *YAML* configuration file under *build.config* attribute. It is also
-possible to configure Linux kernel but configuration changes are then saved in LEDE build system in target directory.
+possible to configure Linux kernel. However, the configuration changes are then saved in LEDE build system in target directory.
 
 ```commandline
-# configure miner firwmare
+# configure miner firmware
 $ ./lede.py config
 
 # configure Linux kernel
