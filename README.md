@@ -18,23 +18,20 @@ purposes. See deployment for notes on how to deploy the project on a live system
 
 ### Prerequisites
 
-The Miner build system is written in *Python 3.5.3* and it also requires following modules:
-
-* GitPython 2.1.8
-* ruamel.yaml 0.13.4
-* termcolor 1.1.0
-* colorlog 2.10.0
-* progress 1.2
-* Paramiko 2.0
+The Miner build system is written for *Python 3.5*. The only prerequisite is virtualenv tool:
 
 ### Installing
 
 Clone git repository with *lede-meta* to some directory.
 
 ```commandline
+```
 # clone LEDE build system from git
 $ git clone git@gitlab.bo:x/lede-meta.git
 $ cd lede-meta
+$ virtualenv --python=/usr/bin/python3.5 .env
+$ source .env/bin/activate
+$ pip install -r requirements.txt
 ```
 
 ## Building
