@@ -7,6 +7,7 @@ import sys
 
 from collections import OrderedDict, namedtuple
 from termcolor import colored
+from functools import partial
 
 from lede.config import RemoteWalker
 from lede.repo import RepoProgressPrinter
@@ -76,6 +77,7 @@ class Builder:
 
             - ``path`` - list of directories prepended to PATH environment variable
             - ``output`` - if true then method returns captured stdout otherwise stdout is printed to standard output
+            - ``init`` - an object to be called in the child process just before the child is executed
         :return:
             Captured stdout when `output` argument is set to True.
         """
@@ -83,6 +85,7 @@ class Builder:
         cwd = self._working_dir
         path = kwargs.get('path')
         output = kwargs.get('output', False)
+        init = kwargs.get('init', None)
         stdout = subprocess.PIPE if output else None
 
         if path:
@@ -95,7 +98,7 @@ class Builder:
 
         logging.debug("Run '{}' in '{}'".format(' '.join(args), cwd))
 
-        process = subprocess.run(args, stdout=stdout, check=True, cwd=cwd, env=env)
+        process = subprocess.run(args, stdout=stdout, check=True, cwd=cwd, env=env, preexec_fn=init)
         if output:
             return process.stdout
 
@@ -408,7 +411,8 @@ class Builder:
             aliases = self._config.build.aliases
             args.extend('{}/install'.format(aliases[target]) for target in targets)
         # run make to build whole LEDE
-        self._run(args, path=[xilinx_bin])
+        # set umask to 0022 to fix issue with incorrect root fs access rights
+        self._run(args, path=[xilinx_bin], init=partial(os.umask, 0o0022))
 
     def _write_uenv(self, stream):
         """
