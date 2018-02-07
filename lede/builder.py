@@ -479,7 +479,8 @@ class Builder:
 
         logging.info("Start deploying Miner firmware...")
 
-        generic_dir = os.path.join(self._working_dir, 'bin', 'targets', 'zynq', 'generic')
+        generic_dir = os.path.join(self._working_dir, 'bin', 'targets', 'zynq',
+                                   'generic' if not self._use_glibc() else 'generic-glibc')
         image = Image(
             boot_bin=os.path.join(generic_dir, 'uboot-zynq-miner', 'BOOT.bin'),
             fit_itb=os.path.join(generic_dir, 'lede-zynq-miner-squashfs-fit.itb')
