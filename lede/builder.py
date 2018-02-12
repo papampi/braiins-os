@@ -481,12 +481,11 @@ class Builder:
 
         generic_dir = os.path.join(self._working_dir, 'bin', 'targets', 'zynq',
                                    'generic' if not self._use_glibc() else 'generic-glibc')
-        image = Image(
-            boot_bin=os.path.join(generic_dir, 'uboot-zynq-miner', 'BOOT.bin'),
-            fit_itb=os.path.join(generic_dir, 'lede-zynq-miner-squashfs-fit.itb')
-        )
-
         if target == 'sd':
+            image = Image(
+                boot_bin=os.path.join(generic_dir, 'uboot-zynq-miner', 'BOOT.bin'),
+                fit_itb=os.path.join(generic_dir, 'lede-zynq-miner-sd-squashfs-fit.itb')
+            )
             self._deploy_ssh_sd(image)
         else:
             logging.error("Unsupported target '{}' for firmware image".format(target))
