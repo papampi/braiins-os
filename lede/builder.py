@@ -483,7 +483,7 @@ class Builder:
                                    'generic' if not self._use_glibc() else 'generic-glibc')
         if target == 'sd':
             image = Image(
-                boot_bin=os.path.join(generic_dir, 'uboot-zynq-miner', 'BOOT.bin'),
+                boot_bin=os.path.join(generic_dir, 'uboot-zynq-miner-sd', 'BOOT.bin'),
                 fit_itb=os.path.join(generic_dir, 'lede-zynq-miner-sd-squashfs-fit.itb')
             )
             self._deploy_ssh_sd(image)
