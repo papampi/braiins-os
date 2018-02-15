@@ -421,7 +421,6 @@ class Builder:
         :param stream:
             File stream with write access.
         """
-        stream.write("bootargs=console=ttyPS0,115200 root=/dev/ram0 r rootfstype=squashfs earlyprintk\n")
         stream.write("ethaddr={}\n".format(self._config.miner.mac))
 
     def _deploy_ssh_sd(self, image):
