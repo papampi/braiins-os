@@ -502,7 +502,8 @@ class Builder:
                 return diff.a_path
 
         for name, repo in self._repos.items():
-            logging.info("Status for '{}' ({})".format(name, repo.active_branch.name))
+            working_dir = os.path.relpath(repo.working_dir, os.getcwd())
+            logging.info("Status for '{}': '{}' ({})".format(name, working_dir, repo.active_branch.name))
             clean = True
             indexed_files = repo.head.commit.diff()
             if len(indexed_files):
