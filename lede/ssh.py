@@ -3,6 +3,7 @@ import logging
 
 from contextlib import contextmanager
 from subprocess import CalledProcessError
+from collections import namedtuple
 
 
 class SSHClient(paramiko.SSHClient):
@@ -19,6 +20,8 @@ class SSHClient(paramiko.SSHClient):
 
 
 class SSHManager:
+    RemoteProcess = namedtuple('RemoteProcess', ['stdin', 'stdout', 'stderr'])
+
     """
     SSH Manager simplifies file operations and command running
     """
@@ -108,14 +111,37 @@ class SSHManager:
 
         self._check_exit_status(cmd, stdout, stderr)
 
-    def run(self, *args):
+    def _get_cmd(self, args) -> str:
         """
-        Run system command on remote system
+        Return command string compatible with SSH client exec_command
         """
         if type(args[0]) is list:
             args = args[0]
 
-        cmd = ' '.join(args)
+        return ' '.join(args)
+
+    @contextmanager
+    def pipe(self, *args):
+        """
+        Context manager for running system command on remote system
+
+        :return:
+            RemoteProcess with stdin, stdout and stderr.
+        """
+        cmd = self._get_cmd(args)
+
+        logging.debug("Remotely running command '{}'...".format(cmd))
+        process = self.RemoteProcess(*self._client.exec_command(cmd))
+        yield process
+        process.stdin.channel.shutdown_write()
+
+        self._check_exit_status(cmd, process.stdout, process.stderr)
+
+    def run(self, *args):
+        """
+        Run system command on remote system
+        """
+        cmd = self._get_cmd(args)
 
         logging.debug("Remotely running command '{}'...".format(cmd))
         _, stdout, stderr = self._client.exec_command(cmd)

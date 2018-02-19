@@ -5,6 +5,7 @@ import git
 import os
 import sys
 
+from contextlib import contextmanager
 from collections import OrderedDict, namedtuple
 from termcolor import colored
 from functools import partial
@@ -37,6 +38,9 @@ class Builder:
     FEEDS_CONF_SRC = 'feeds.conf.default'
     FEEDS_CONF_DST = 'feeds.conf'
     CONFIG_NAME = '.config'
+    MINER_MAC = 'ethaddr'
+    MINER_HWID = 'miner_hwid'
+    MINER_CFG_SIZE = 0x10000
 
     def __init__(self, config, argv):
         """
@@ -55,7 +59,16 @@ class Builder:
         self._repos = OrderedDict()
         self._init_repos()
 
-    def _run(self, *args, **kwargs):
+    @contextmanager
+    def pipe(self, *args):
+        """
+        Context manager for running system command in LEDE source directory
+
+        :return:
+            RemoteProcess with stdin, stdout and stderr.
+        """
+
+    def _run(self, *args, path=None, input=None, output=False, init=None):
         """
         Run system command in LEDE source directory
 
@@ -72,20 +85,19 @@ class Builder:
 
             - `self._run([cmd, arg1, arg2])`
             - `self._run(cmd, arg1, arg2)`.
-        :param kwargs:
-            There are supported following key argument:
-
-            - ``path`` - list of directories prepended to PATH environment variable
-            - ``output`` - if true then method returns captured stdout otherwise stdout is printed to standard output
-            - ``init`` - an object to be called in the child process just before the child is executed
+        :param path:
+            List of directories prepended to PATH environment variable.
+        :param input:
+            A string which is passed to the subprocess's stdin.
+        :param output:
+            If true then method returns captured stdout otherwise stdout is printed to standard output.
+        :param init:
+            An object to be called in the child process just before the child is executed.
         :return:
             Captured stdout when `output` argument is set to True.
         """
         env = None
         cwd = self._working_dir
-        path = kwargs.get('path')
-        output = kwargs.get('output', False)
-        init = kwargs.get('init', None)
         stdout = subprocess.PIPE if output else None
 
         if path:
@@ -98,7 +110,7 @@ class Builder:
 
         logging.debug("Run '{}' in '{}'".format(' '.join(args), cwd))
 
-        process = subprocess.run(args, stdout=stdout, check=True, cwd=cwd, env=env, preexec_fn=init)
+        process = subprocess.run(args, input=input, stdout=stdout, check=True, cwd=cwd, env=env, preexec_fn=init)
         if output:
             return process.stdout
 
@@ -421,14 +433,81 @@ class Builder:
         :param stream:
             File stream with write access.
         """
-        stream.write("ethaddr={}\n".format(self._config.miner.mac))
+        stream.write("{}={}\n".format(self.MINER_MAC, self._config.miner.mac))
 
-    def _deploy_ssh_sd(self, image):
+    def _mtd_write(self, ssh, image_path: str, device: str):
+        """
+        Write image to remote NAND partition
+
+        :param ssh:
+            Connected SSH client.
+        :param image_path:
+            Path to local image file.
+        :param device:
+            Name of NAND partition for writing image.
+        """
+        with open(image_path, "rb") as image_file, ssh.pipe('mtd', 'write', '-', device) as remote:
+            shutil.copyfileobj(image_file, remote.stdin)
+
+    def _deploy_ssh_sd(self, ssh, sftp, image):
         """
         Deploy image to the SD card over SSH connection
 
+        :param ssh:
+            Connected SSH client.
+        :param sftp:
+            Opened SFTP connection by SSH client.
         :param image:
             Paths to firmware images.
+        """
+        ssh.run('mount', '/dev/mmcblk0p1', '/mnt')
+        sftp.chdir('/mnt')
+
+        logging.info("Creating 'uEnv.txt'...")
+        with sftp.open('uEnv.txt', 'w') as file:
+            self._write_uenv(file)
+
+        logging.info("Loading 'BOOT.bin'...")
+        sftp.put(image.boot_bin, 'BOOT.bin')
+        logging.info("Loading 'fit.itb'...")
+        sftp.put(image.fit_itb, 'fit.itb')
+        ssh.run('umount', '/mnt')
+
+    def _deploy_ssh_nand(self, ssh, image):
+        """
+        Deploy image to the NAND over SSH connection
+
+        It is required that remote system has been booted from SD card!
+
+        :param ssh:
+            Connected SSH client.
+        :param image:
+            Paths to firmware images.
+        """
+        image_map = [
+            (image.boot_bin, 'BOOT.bin', 'BOOT.bin'),
+            (image.fit_itb, 'fit.itb', 'kernel'),
+            (image.rootfs, 'rootfs.bin', 'rootfs')
+        ]
+
+        for file_path, name, device in image_map:
+            logging.info("Writing '{}' to NAND partition '{}'...".format(name, device))
+            self._mtd_write(ssh, file_path, device)
+
+    def _deploy_ssh(self, images):
+        """
+        Deploy NAND or SD card image over SSH connection
+
+        It can also change configuration in NAND and SD card.
+
+        :param images:
+            List of images for deployment.
+            It is also possible to provide empty list and alter only miner configuration:
+
+            - change MAC and HW ID in U-Boot env
+            - erase NAND partitions to set it to the default state
+            - remove extroot UUID
+            - overwrite miner configuration with new MAC or HW ID
         """
         hostname = self._config.deploy.ssh.get('hostname', None)
         password = self._config.deploy.ssh.get('password', None)
@@ -442,52 +521,98 @@ class Builder:
         with SSHManager(hostname, username, password) as ssh:
             sftp = ssh.open_sftp()
 
-            # prepare partition 1
-            ssh.run('mount', '/dev/mmcblk0p1', '/mnt')
-            sftp.chdir('/mnt')
+            image_sd = images.get('sd')
+            image_nand = images.get('nand')
 
-            logging.info("Creating 'uEnv.txt'...")
-            with sftp.open('uEnv.txt', 'w') as file:
-                self._write_uenv(file)
+            if image_sd:
+                self._deploy_ssh_sd(ssh, sftp, image_sd)
+            if image_nand:
+                self._deploy_ssh_nand(ssh, image_nand)
 
-            logging.info("Loading 'BOOT.bin'...")
-            sftp.put(image.boot_bin, 'BOOT.bin')
-            logging.info("Loading 'fit.itb'...")
-            sftp.put(image.fit_itb, 'fit.itb')
-            ssh.run('umount', '/mnt')
+            # write miner configuration to miner_cfg NAND
+            if self._config.deploy.write_miner_cfg == 'yes':
+                mkenvimage = os.path.join(self._working_dir,
+                                          'build_dir', 'host', 'u-boot-2014.10', 'tools', 'mkenvimage')
+                if not os.path.exists(mkenvimage):
+                    logging.error("Missing utility '{}'".format(mkenvimage))
+                    raise BuilderStop
+                input='{}={}\n' \
+                      '{}={}\n' \
+                      ''.format(self.MINER_MAC, self._config.miner.mac,
+                                self.MINER_HWID, self._config.miner.hwid)
+                output = self._run(mkenvimage, '-s', str(self.MINER_CFG_SIZE), '-', input=input.encode(), output=True)
+                with ssh.pipe('mtd', 'write', '-', 'miner_cfg') as remote:
+                    remote.stdin.write(output)
 
-            # prepare partition 1
-            ssh.run('mount', '/dev/mmcblk0p2', '/mnt')
-            sftp.chdir('/mnt')
-            if self._config.deploy.remove_uuid == 'yes' and ('.extroot-uuid' in sftp.listdir('etc')):
-                logging.info("Removing extroot UUID...")
-                sftp.remove('etc/.extroot-uuid')
-            ssh.run('umount', '/mnt')
+            # change miner configuration in U-Boot env
+            if self._config.deploy.set_miner_env == 'yes' and self._config.deploy.reset_uboot_env == 'no':
+                logging.info("Writing miner configuration to U-Boot env in NAND...")
+                ssh.run('fw_setenv', self.MINER_MAC, self._config.miner.mac)
+                ssh.run('fw_setenv', self.MINER_HWID, self._config.miner.hwid)
+
+            reset_extroot = self._config.deploy.reset_extroot == 'yes'
+            remove_extroot_uuid = self._config.deploy.remove_extroot_uuid == 'yes'
+
+            if reset_extroot or remove_extroot_uuid:
+                ssh.run('mount', '/dev/mmcblk0p2', '/mnt')
+                sftp.chdir('/mnt')
+                if reset_extroot:
+                    logging.info("Removing all data from extroot...")
+                    ssh.run('rm', '-fr', '/mnt/*')
+                elif '.extroot-uuid' in sftp.listdir('etc'):
+                    logging.info("Removing extroot UUID...")
+                    sftp.remove('etc/.extroot-uuid')
+                ssh.run('umount', '/mnt')
+
+            # erase selected NAND partitions
+            erase_map = [
+                ('reset_uboot_env', 'uboot_env'),
+                ('reset_overlay', 'rootfs_data')
+            ]
+            for option_name, device in erase_map:
+                if self._config.deploy.get(option_name, 'no') == 'yes':
+                    logging.info("Erasing NAND partition '{}'...".format(device))
+                    ssh.run('mtd', 'erase', device)
 
             # reboot system if requested
             if self._config.deploy.reboot == 'yes':
                 ssh.run('reboot')
 
+            sftp.close()
+
     def deploy(self):
         """
         Deploy Miner firmware to target platform
         """
-        Image = namedtuple('Image', ['boot_bin', 'fit_itb'])
+        Image = namedtuple('SdImage', ['boot_bin', 'fit_itb', 'rootfs'])
 
-        target = self._config.deploy.target
+        targets = self._config.deploy.get('targets', None)
 
         logging.info("Start deploying Miner firmware...")
 
         generic_dir = os.path.join(self._working_dir, 'bin', 'targets', 'zynq',
                                    'generic' if not self._use_glibc() else 'generic-glibc')
-        if target == 'sd':
-            image = Image(
-                boot_bin=os.path.join(generic_dir, 'uboot-zynq-miner-sd', 'BOOT.bin'),
-                fit_itb=os.path.join(generic_dir, 'lede-zynq-miner-sd-squashfs-fit.itb')
-            )
-            self._deploy_ssh_sd(image)
-        else:
-            logging.error("Unsupported target '{}' for firmware image".format(target))
+
+        images = {}
+        if targets:
+            for target in targets:
+                if target not in ['sd', 'nand']:
+                    logging.error("Unsupported target '{}' for firmware image".format(target))
+
+            if 'sd' in targets:
+                images['sd'] = Image(
+                    boot_bin=os.path.join(generic_dir, 'uboot-zynq-miner-sd', 'BOOT.bin'),
+                    fit_itb=os.path.join(generic_dir, 'lede-zynq-miner-sd-squashfs-fit.itb'),
+                    rootfs=None
+                )
+            if 'nand' in targets:
+                images['nand'] = Image(
+                    boot_bin=os.path.join(generic_dir, 'uboot-zynq-miner-nand', 'BOOT.bin'),
+                    fit_itb=os.path.join(generic_dir, 'lede-zynq-miner-nand-squashfs-fit.itb'),
+                    rootfs=os.path.join(generic_dir, 'lede-zynq-miner-nand-squashfs-rootfs.bin')
+                )
+
+        self._deploy_ssh(images)
 
     def status(self):
         """

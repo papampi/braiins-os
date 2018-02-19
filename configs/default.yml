@@ -1,6 +1,8 @@
 miner:
     # default miner MAC address
     mac: 00:0A:35:FF:FF:FF
+    # miner HW identifier (dd if=/dev/random bs=1 count=12 2>/dev/null | base64)
+    hwid: Q50QDhdWuWq9yDr5
 
 build:
     # name of subdirectory in the build directory
@@ -50,11 +52,26 @@ feeds:
 
 deploy:
     # default target NAND or SD card
-    target: sd
+    targets:
+        - sd
+        - nand
     # reboot miner after successful deploy
-    reboot: yes
+    reboot: no
     # remove UUID from SD card
-    remove_uuid: yes
+    remove_extroot_uuid: yes
+    # set U-Boot environment with miner configuration (MAC, HWID)
+    # it is useful for changing HWID when SD card is inserted
+    # SD card U-Boot cannot write to the NAND directly
+    set_miner_env: no
+    # overwrite NAND with new miner configuration (MAC, HWID)
+    # it is also necessary to reset uboot_env and overlay/extroot
+    write_miner_cfg: no
+    # erase U-Boot environment and set it to default one after reboot
+    reset_uboot_env: no
+    # erase NAND overlay (rootfs_data) and reinit it after reboot
+    reset_overlay: no
+    # erase SD card overlay and reinit it after reboot
+    reset_extroot: no
 
     # setting for deploy over SSH connection
     ssh:
