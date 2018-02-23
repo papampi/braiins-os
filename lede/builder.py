@@ -1,6 +1,7 @@
 import logging
 import subprocess
 import shutil
+import tarfile
 import git
 import os
 import sys
@@ -40,6 +41,7 @@ class Builder:
     CONFIG_NAME = '.config'
     MINER_MAC = 'ethaddr'
     MINER_HWID = 'miner_hwid'
+    MINER_FIRMWARE = 'firmware'
     MINER_CFG_SIZE = 0x10000
 
     def __init__(self, config, argv):
@@ -449,6 +451,18 @@ class Builder:
         with open(image_path, "rb") as image_file, ssh.pipe('mtd', 'write', '-', device) as remote:
             shutil.copyfileobj(image_file, remote.stdin)
 
+    @staticmethod
+    def _get_firmware_mtd(index) -> str:
+        """
+        Return MTD device for current firmware
+
+        :param index:
+            Index of firmware partition.
+        :return:
+            String with path to MTD device.
+        """
+        return '/dev/mtd' + {1: '4', 2: '5'}.get(index)
+
     def _deploy_ssh_sd(self, ssh, sftp, image):
         """
         Deploy image to the SD card over SSH connection
@@ -484,15 +498,39 @@ class Builder:
         :param image:
             Paths to firmware images.
         """
-        image_map = [
-            (image.boot_bin, 'BOOT.bin', 'BOOT.bin'),
-            (image.fit_itb, 'fit.itb', 'kernel'),
-            (image.rootfs, 'rootfs.bin', 'rootfs')
-        ]
+        logging.info("Writing 'BOOT.bin' to NAND partition 'BOOT.bin'...")
+        self._mtd_write(ssh, image.boot_bin, 'BOOT.bin')
 
-        for file_path, name, device in image_map:
-            logging.info("Writing '{}' to NAND partition '{}'...".format(name, device))
-            self._mtd_write(ssh, file_path, device)
+        firmwares = (
+            ('nand_firmware1', 1),
+            ('nand_firmware2', 2)
+        )
+        targets = self._config.deploy.targets
+        mtds = ((name[5:], self._get_firmware_mtd(i)) for name, i in firmwares if name in targets)
+        for firmware, mtd in mtds:
+            if self._config.deploy.factory_image == 'yes':
+                logging.info("Formating '{}' ({}) with 'factory.bin'...".format(firmware, mtd))
+                # use factory image which deletes overlay data from UBIFS
+                image_size = os.path.getsize(image.factory)
+                with open(image.factory, "rb") as image_file:
+                    with ssh.pipe('ubiformat', mtd, '-f', '-', '-S', str(image_size)) as remote:
+                        shutil.copyfileobj(image_file, remote.stdin)
+            else:
+                logging.info("Updating '{}' ({}) volumes with 'sysupgrade.tar'...".format(firmware, mtd))
+                # use sysupgrade image which preserves overlay data from UBIFS
+                ssh.run('ubiattach', '-p', mtd)
+                volume_images = (
+                    ('kernel', 'sysupgrade-miner-nand/kernel', '/dev/ubi0_0'),
+                    ('rootfs', 'sysupgrade-miner-nand/root', '/dev/ubi0_1')
+                )
+                for volume_name, volume_image, device in volume_images:
+                    logging.info("Updating volume '{}' ({}) with '{}'...".format(volume_name, device, volume_image))
+                    with tarfile.open(image.sysupgrade, 'r') as sysupgrade_file:
+                        image_info = sysupgrade_file.getmember(volume_image)
+                        image_file = sysupgrade_file.extractfile(image_info)
+                        with ssh.pipe('ubiupdatevol', device, '-', '-s', str(image_info.size)) as remote:
+                            shutil.copyfileobj(image_file, remote.stdin)
+                ssh.run('ubidetach', '-p', mtd)
 
     def _deploy_ssh(self, images):
         """
@@ -549,9 +587,19 @@ class Builder:
                 logging.info("Writing miner configuration to U-Boot env in NAND...")
                 ssh.run('fw_setenv', self.MINER_MAC, self._config.miner.mac)
                 ssh.run('fw_setenv', self.MINER_HWID, self._config.miner.hwid)
+                ssh.run('fw_setenv', self.MINER_FIRMWARE, str(self._config.miner.firmware))
 
             reset_extroot = self._config.deploy.reset_extroot == 'yes'
             remove_extroot_uuid = self._config.deploy.remove_extroot_uuid == 'yes'
+            remove_miner_hwid = self._config.deploy.remove_miner_hwid == 'yes'
+            reset_uboot_env = self._config.deploy.reset_uboot_env == 'yes'
+            reset_overlay = self._config.deploy.reset_overlay == 'yes'
+
+            ubi_attach = remove_miner_hwid or reset_overlay
+
+            if ubi_attach:
+                firmware_mtd = self._get_firmware_mtd(self._config.miner.firmware)
+                ssh.run('ubiattach', '-p', firmware_mtd)
 
             if reset_extroot or remove_extroot_uuid:
                 ssh.run('mount', '/dev/mmcblk0p2', '/mnt')
@@ -564,15 +612,26 @@ class Builder:
                     sftp.remove('etc/.extroot-uuid')
                 ssh.run('umount', '/mnt')
 
-            # erase selected NAND partitions
-            erase_map = [
-                ('reset_uboot_env', 'uboot_env'),
-                ('reset_overlay', 'rootfs_data')
-            ]
-            for option_name, device in erase_map:
-                if self._config.deploy.get(option_name, 'no') == 'yes':
-                    logging.info("Erasing NAND partition '{}'...".format(device))
-                    ssh.run('mtd', 'erase', device)
+            if remove_miner_hwid:
+                logging.info("Removing miner HWID...")
+                sftp.remove('/etc/miner_hwid')
+                if not reset_overlay:
+                    # remove HWID from NAND overlay
+                    ssh.run('mount', '-t', 'ubifs', '/dev/ubi0_2', '/mnt')
+                    sftp.remove('/mnt/upper/etc/miner_hwid')
+                    ssh.run('umount', '/mnt')
+
+            if reset_uboot_env:
+                logging.info("Erasing NAND partition 'uboot_env'...")
+                ssh.run('mtd', 'erase', 'uboot_env')
+
+            # truncate overlay for current firmware
+            if reset_overlay:
+                logging.info("Truncating UBI volume 'rootfs_data'...")
+                ssh.run('ubiupdatevol', '/dev/ubi0_2', '-t')
+
+            if ubi_attach:
+                ssh.run('ubidetach', '-p', firmware_mtd)
 
             # reboot system if requested
             if self._config.deploy.reboot == 'yes':
@@ -584,7 +643,8 @@ class Builder:
         """
         Deploy Miner firmware to target platform
         """
-        Image = namedtuple('SdImage', ['boot_bin', 'fit_itb', 'rootfs'])
+        ImageSd = namedtuple('ImageSd', ['boot_bin', 'fit_itb'])
+        ImageNand = namedtuple('ImageNand', ['boot_bin', 'factory', 'sysupgrade'])
 
         targets = self._config.deploy.get('targets', None)
 
@@ -596,20 +656,20 @@ class Builder:
         images = {}
         if targets:
             for target in targets:
-                if target not in ['sd', 'nand']:
+                if target not in ['sd', 'nand_firmware1', 'nand_firmware2']:
                     logging.error("Unsupported target '{}' for firmware image".format(target))
+                    raise BuilderStop
 
             if 'sd' in targets:
-                images['sd'] = Image(
+                images['sd'] = ImageSd(
                     boot_bin=os.path.join(generic_dir, 'uboot-zynq-miner-sd', 'BOOT.bin'),
-                    fit_itb=os.path.join(generic_dir, 'lede-zynq-miner-sd-squashfs-fit.itb'),
-                    rootfs=None
+                    fit_itb=os.path.join(generic_dir, 'lede-zynq-miner-sd-squashfs-fit.itb')
                 )
-            if 'nand' in targets:
-                images['nand'] = Image(
+            if any(target in targets for target in ('nand_firmware1', 'nand_firmware2')):
+                images['nand'] = ImageNand(
                     boot_bin=os.path.join(generic_dir, 'uboot-zynq-miner-nand', 'BOOT.bin'),
-                    fit_itb=os.path.join(generic_dir, 'lede-zynq-miner-nand-squashfs-fit.itb'),
-                    rootfs=os.path.join(generic_dir, 'lede-zynq-miner-nand-squashfs-rootfs.bin')
+                    factory=os.path.join(generic_dir, 'lede-zynq-miner-nand-squashfs-factory.bin'),
+                    sysupgrade=os.path.join(generic_dir, 'lede-zynq-miner-nand-squashfs-sysupgrade.tar')
                 )
 
         self._deploy_ssh(images)

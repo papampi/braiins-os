@@ -3,6 +3,8 @@ miner:
     mac: 00:0A:35:FF:FF:FF
     # miner HW identifier (dd if=/dev/random bs=1 count=12 2>/dev/null | base64)
     hwid: Q50QDhdWuWq9yDr5
+    # select NAND firmware which is used for boot
+    firmware: 1
 
 build:
     # name of subdirectory in the build directory
@@ -54,12 +56,19 @@ deploy:
     # default target NAND or SD card
     targets:
         - sd
-        - nand
+#        - nand_firmware1
+#        - nand_firmware2
+    # use factory or sysupgrade image for formating/updating UBI partition
+    # for first load is needed factory image
+    # factory image swipes rootfs_data overlay!
+    factory_image: no
     # reboot miner after successful deploy
     reboot: no
     # remove UUID from SD card
     remove_extroot_uuid: yes
-    # set U-Boot environment with miner configuration (MAC, HWID)
+    # remove /etc/miner_hwid which will be generated during reboot
+    remove_miner_hwid: no
+    # set U-Boot environment with miner configuration (MAC, HWID, firmware)
     # it is useful for changing HWID when SD card is inserted
     # SD card U-Boot cannot write to the NAND directly
     set_miner_env: no
@@ -68,7 +77,8 @@ deploy:
     write_miner_cfg: no
     # erase U-Boot environment and set it to default one after reboot
     reset_uboot_env: no
-    # erase NAND overlay (rootfs_data) and reinit it after reboot
+    # erase NAND/UBI overlay (rootfs_data) and reinit it after reboot
+    # it is erased only overlay for current firmware (selected by miner.firmware)
     reset_overlay: no
     # erase SD card overlay and reinit it after reboot
     reset_extroot: no
