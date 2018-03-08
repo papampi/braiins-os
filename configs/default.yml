@@ -1,4 +1,6 @@
 miner:
+    # possible platforms are G9, G19
+    platform: G9
     # default miner MAC address
     mac: 00:0A:35:FF:FF:FF
     # miner HW identifier (dd if=/dev/random bs=1 count=12 2>/dev/null | base64)
@@ -38,6 +40,12 @@ remote:
             uri: git@gitlab.bo:x/lede.git
         luci:
             uri: git@gitlab.bo:x/luci.git
+        platform:
+            uri: git@gitlab.bo:x/zynq_platform.git
+            branch: master
+        u-boot:
+            uri: git@gitlab.bo:x/u-boot-xlnx.git
+            branch: braiins-lede
         linux:
             uri: git@gitlab.bo:x/linux-xlnx.git
         cgminer:
@@ -62,6 +70,8 @@ deploy:
     # for first load is needed factory image
     # factory image swipes rootfs_data overlay!
     factory_image: no
+    # write FPGA bitstream to NAND
+    write_bitstream: no
     # reboot miner after successful deploy
     reboot: no
     # remove UUID from SD card

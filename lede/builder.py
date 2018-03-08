@@ -34,6 +34,8 @@ class Builder:
     """
     LEDE = 'lede'
     LUCI = 'luci'
+    PLATFORM = 'platform'
+    UBOOT = 'u-boot'
     LINUX = 'linux'
     CGMINER = 'cgminer'
     FEEDS_CONF_SRC = 'feeds.conf.default'
@@ -43,6 +45,8 @@ class Builder:
     MINER_HWID = 'miner_hwid'
     MINER_FIRMWARE = 'firmware'
     MINER_CFG_SIZE = 0x10000
+
+    MTD_BITSTREAM = 'system'
 
     def __init__(self, config, argv):
         """
@@ -286,8 +290,12 @@ class Builder:
         It also sets paths to Linux and CGMiner external directories in this configuration file.
         """
         logging.info("Preparing config...")
-        linux_dir = self._get_repo(self.LINUX).working_dir
-        cgminer_dir = self._get_repo(self.CGMINER).working_dir
+        externals = (
+            ('CONFIG_EXTERNAL_KERNEL_TREE', self.LINUX, 'kernel'),
+            ('CONFIG_EXTERNAL_CGMINER_TREE', self.CGMINER, 'CGMiner'),
+            ('CONFIG_EXTERNAL_UBOOT_TREE', self.UBOOT, 'U-Boot')
+        )
+
         config_src_path, config_dst_path = self._get_config_paths()
 
         config_copy = self._config.build.config_always == 'yes'
@@ -302,12 +310,13 @@ class Builder:
         if default_config or (config_dst_time < config_src_time) or config_copy:
             logging.debug("Copy config from '{}'".format(config_src_path))
             shutil.copy(config_src_path, config_dst_path)
-            logging.debug("Set external kernel tree to '{}'".format(linux_dir))
-            logging.debug("Set external CGMiner tree to '{}'".format(cgminer_dir))
+
             with open(config_dst_path, 'a') as config_dst:
                 # set paths to Linux and CGMiner external directories
-                config_dst.write('CONFIG_EXTERNAL_KERNEL_TREE="{}"\n'.format(linux_dir))
-                config_dst.write('CONFIG_EXTERNAL_CGMINER_TREE="{}"\n'.format(cgminer_dir))
+                for config, repo_name, name in externals:
+                    external_dir = self._get_repo(repo_name).working_dir
+                    logging.debug("Set external {} tree to '{}'".format(name, external_dir))
+                    config_dst.write('{}="{}"\n'.format(config, external_dir))
             logging.debug("Creating full configuration file")
             self._run('make', 'defconfig')
 
@@ -327,7 +336,11 @@ class Builder:
 
         logging.info("Saving changes in configuration to '{}'...".format(config_dst_path))
         with open(config_dst_path, 'w') as config_dst:
-            configs = ['CONFIG_EXTERNAL_KERNEL_TREE', 'CONFIG_EXTERNAL_CGMINER_TREE']
+            configs = [
+                'CONFIG_EXTERNAL_KERNEL_TREE',
+                'CONFIG_EXTERNAL_CGMINER_TREE',
+                'CONFIG_EXTERNAL_UBOOT_TREE'
+            ]
             # call ./scripts/diffconfig.sh to get configuration diff
             output = self._run(os.path.join('scripts', 'diffconfig.sh'), output=True)
             for line in output.decode('utf-8').splitlines():
@@ -414,8 +427,6 @@ class Builder:
         logging.info("Start building LEDE...'")
         jobs = self._config.build.get('jobs', 1)
         verbose = verbose or self._config.build.get('verbose', 'no') == 'yes'
-        xilinx_sdk = os.path.abspath(os.path.expanduser(self._config.build.xilinx_sdk))
-        xilinx_bin = os.path.join(xilinx_sdk, 'bin')
 
         # prepare arguments for build
         args = ['make', '-j{}'.format(jobs)]
@@ -426,7 +437,7 @@ class Builder:
             args.extend('{}/install'.format(aliases[target]) for target in targets)
         # run make to build whole LEDE
         # set umask to 0022 to fix issue with incorrect root fs access rights
-        self._run(args, path=[xilinx_bin], init=partial(os.umask, 0o0022))
+        self._run(args, init=partial(os.umask, 0o0022))
 
     def _write_uenv(self, stream):
         """
@@ -461,7 +472,7 @@ class Builder:
         :return:
             String with path to MTD device.
         """
-        return '/dev/mtd' + {1: '4', 2: '5'}.get(index)
+        return '/dev/mtd' + {1: '6', 2: '7'}.get(index)
 
     def _deploy_ssh_sd(self, ssh, sftp, image):
         """
@@ -481,10 +492,16 @@ class Builder:
         with sftp.open('uEnv.txt', 'w') as file:
             self._write_uenv(file)
 
-        logging.info("Loading 'BOOT.bin'...")
-        sftp.put(image.boot_bin, 'BOOT.bin')
-        logging.info("Loading 'fit.itb'...")
-        sftp.put(image.fit_itb, 'fit.itb')
+        # upload all files to the SD card
+        upload = (
+            (image.boot, 'boot.bin'),
+            (image.uboot, 'u-boot.img'),
+            (image.kernel, 'fit.itb')
+        )
+        for local, remote in upload:
+            logging.info("Uploading '{}'...".format(remote))
+            sftp.put(local, remote)
+
         ssh.run('umount', '/mnt')
 
     def _deploy_ssh_nand(self, ssh, image):
@@ -498,8 +515,13 @@ class Builder:
         :param image:
             Paths to firmware images.
         """
-        logging.info("Writing 'BOOT.bin' to NAND partition 'BOOT.bin'...")
-        self._mtd_write(ssh, image.boot_bin, 'BOOT.bin')
+        boot_images = (
+            (image.boot, 'boot'),
+            (image.uboot, 'uboot')
+        )
+        for local, mtd in boot_images:
+            logging.info("Writing '{}' to NAND partition '{}'...".format(os.path.basename(local), mtd))
+            self._mtd_write(ssh, local, mtd)
 
         firmwares = (
             ('nand_firmware1', 1),
@@ -568,6 +590,19 @@ class Builder:
                 self._deploy_ssh_nand(ssh, image_nand)
 
             # write miner configuration to miner_cfg NAND
+            if self._config.deploy.write_bitstream == 'yes':
+                bitstream = {
+                    'G9': os.path.join('g9', 'bin', 'system.bit'),
+                    'G19': os.path.join('g19', 'bin', 'system.bit')
+                }
+                platform = self._config.miner.platform
+                platform_dir = self._get_repo(self.PLATFORM).working_dir
+                logging.info("Writing bitstream for platform '{}' to NAND partition '{}'..."
+                             .format(platform, self.MTD_BITSTREAM))
+                local = os.path.join(platform_dir, bitstream[platform])
+                self._mtd_write(ssh, local, self.MTD_BITSTREAM)
+
+            # write miner configuration to miner_cfg NAND
             if self._config.deploy.write_miner_cfg == 'yes':
                 mkenvimage = os.path.join(self._working_dir,
                                           'build_dir', 'host', 'u-boot-2014.10', 'tools', 'mkenvimage')
@@ -579,6 +614,7 @@ class Builder:
                       ''.format(self.MINER_MAC, self._config.miner.mac,
                                 self.MINER_HWID, self._config.miner.hwid)
                 output = self._run(mkenvimage, '-s', str(self.MINER_CFG_SIZE), '-', input=input.encode(), output=True)
+                logging.info("Writing miner configuration to NAND partition 'miner_cfg'...")
                 with ssh.pipe('mtd', 'write', '-', 'miner_cfg') as remote:
                     remote.stdin.write(output)
 
@@ -643,8 +679,8 @@ class Builder:
         """
         Deploy Miner firmware to target platform
         """
-        ImageSd = namedtuple('ImageSd', ['boot_bin', 'fit_itb'])
-        ImageNand = namedtuple('ImageNand', ['boot_bin', 'factory', 'sysupgrade'])
+        ImageSd = namedtuple('ImageSd', ['boot', 'uboot', 'kernel'])
+        ImageNand = namedtuple('ImageNand', ['boot', 'uboot', 'factory', 'sysupgrade'])
 
         targets = self._config.deploy.get('targets', None)
 
@@ -661,13 +697,17 @@ class Builder:
                     raise BuilderStop
 
             if 'sd' in targets:
+                uboot_dir = 'uboot-zynq-miner-sd'
                 images['sd'] = ImageSd(
-                    boot_bin=os.path.join(generic_dir, 'uboot-zynq-miner-sd', 'BOOT.bin'),
-                    fit_itb=os.path.join(generic_dir, 'lede-zynq-miner-sd-squashfs-fit.itb')
+                    boot=os.path.join(generic_dir, uboot_dir, 'boot.bin'),
+                    uboot=os.path.join(generic_dir, uboot_dir, 'u-boot.img'),
+                    kernel=os.path.join(generic_dir, 'lede-zynq-miner-sd-squashfs-fit.itb')
                 )
             if any(target in targets for target in ('nand_firmware1', 'nand_firmware2')):
+                uboot_dir = 'uboot-zynq-miner-nand'
                 images['nand'] = ImageNand(
-                    boot_bin=os.path.join(generic_dir, 'uboot-zynq-miner-nand', 'BOOT.bin'),
+                    boot=os.path.join(generic_dir, uboot_dir, 'boot.bin'),
+                    uboot=os.path.join(generic_dir, uboot_dir, 'u-boot.img'),
                     factory=os.path.join(generic_dir, 'lede-zynq-miner-nand-squashfs-factory.bin'),
                     sysupgrade=os.path.join(generic_dir, 'lede-zynq-miner-nand-squashfs-sysupgrade.tar')
                 )
