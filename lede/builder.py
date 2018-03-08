@@ -43,6 +43,7 @@ class Builder:
     CONFIG_NAME = '.config'
     MINER_MAC = 'ethaddr'
     MINER_HWID = 'miner_hwid'
+    MINER_PLATFORM = 'miner_platform'
     MINER_FIRMWARE = 'firmware'
     MINER_CFG_SIZE = 0x10000
 
@@ -611,8 +612,10 @@ class Builder:
                     raise BuilderStop
                 input='{}={}\n' \
                       '{}={}\n' \
+                      '{}={}\n' \
                       ''.format(self.MINER_MAC, self._config.miner.mac,
-                                self.MINER_HWID, self._config.miner.hwid)
+                                self.MINER_HWID, self._config.miner.hwid,
+                                self.MINER_PLATFORM, self._config.miner.platform)
                 output = self._run(mkenvimage, '-s', str(self.MINER_CFG_SIZE), '-', input=input.encode(), output=True)
                 logging.info("Writing miner configuration to NAND partition 'miner_cfg'...")
                 with ssh.pipe('mtd', 'write', '-', 'miner_cfg') as remote:
