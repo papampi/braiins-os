@@ -10,7 +10,7 @@ miner:
 
 build:
     # name of subdirectory in the build directory
-    name: devel
+    name: devel_g19
     # file with default LEDE configuration
     config: defaults/devel_g19.conf
     # always copy default configuration file
