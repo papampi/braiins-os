@@ -429,6 +429,10 @@ class Builder:
         jobs = self._config.build.get('jobs', 1)
         verbose = verbose or self._config.build.get('verbose', 'no') == 'yes'
 
+        # set PATH environment variable
+        env_path = self._config.build.get('env_path', None)
+        path = env_path and [os.path.abspath(os.path.expanduser(env_path))]
+
         # prepare arguments for build
         args = ['make', '-j{}'.format(jobs)]
         if verbose:
@@ -438,7 +442,7 @@ class Builder:
             args.extend('{}/install'.format(aliases[target]) for target in targets)
         # run make to build whole LEDE
         # set umask to 0022 to fix issue with incorrect root fs access rights
-        self._run(args, init=partial(os.umask, 0o0022))
+        self._run(args, path=path, init=partial(os.umask, 0o0022))
 
     def _write_uenv(self, stream):
         """
