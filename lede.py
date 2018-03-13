@@ -47,7 +47,6 @@ class CommandManager:
     def deploy(self):
         logging.debug("Called command 'deploy'")
         self._builder.prepare()
-        self._builder.build()
         self._builder.deploy()
 
     def status(self):
