@@ -45,7 +45,7 @@ class Builder:
     MINER_HWID = 'miner_hwid'
     MINER_PLATFORM = 'miner_platform'
     MINER_FIRMWARE = 'firmware'
-    MINER_CFG_SIZE = 0x10000
+    MINER_CFG_SIZE = 0x20000
 
     MTD_BITSTREAM = 'system'
 
@@ -537,6 +537,8 @@ class Builder:
         for firmware, mtd in mtds:
             if self._config.deploy.factory_image == 'yes':
                 logging.info("Formating '{}' ({}) with 'factory.bin'...".format(firmware, mtd))
+                # erase device before formating
+                ssh.run('mtd', 'erase', mtd)
                 # use factory image which deletes overlay data from UBIFS
                 image_size = os.path.getsize(image.factory)
                 with open(image.factory, "rb") as image_file:
@@ -620,7 +622,8 @@ class Builder:
                       ''.format(self.MINER_MAC, self._config.miner.mac,
                                 self.MINER_HWID, self._config.miner.hwid,
                                 self.MINER_PLATFORM, self._config.miner.platform)
-                output = self._run(mkenvimage, '-s', str(self.MINER_CFG_SIZE), '-', input=input.encode(), output=True)
+                output = self._run(mkenvimage, '-r', '-p', str(0), '-s', str(self.MINER_CFG_SIZE), '-',
+                                   input=input.encode(), output=True)
                 logging.info("Writing miner configuration to NAND partition 'miner_cfg'...")
                 with ssh.pipe('mtd', 'write', '-', 'miner_cfg') as remote:
                     remote.stdin.write(output)
@@ -634,11 +637,10 @@ class Builder:
 
             reset_extroot = self._config.deploy.reset_extroot == 'yes'
             remove_extroot_uuid = self._config.deploy.remove_extroot_uuid == 'yes'
-            remove_miner_hwid = self._config.deploy.remove_miner_hwid == 'yes'
             reset_uboot_env = self._config.deploy.reset_uboot_env == 'yes'
             reset_overlay = self._config.deploy.reset_overlay == 'yes'
 
-            ubi_attach = remove_miner_hwid or reset_overlay
+            ubi_attach = reset_overlay
 
             if ubi_attach:
                 firmware_mtd = self._get_firmware_mtd(self._config.miner.firmware)
@@ -654,15 +656,6 @@ class Builder:
                     logging.info("Removing extroot UUID...")
                     sftp.remove('etc/.extroot-uuid')
                 ssh.run('umount', '/mnt')
-
-            if remove_miner_hwid:
-                logging.info("Removing miner HWID...")
-                sftp.remove('/etc/miner_hwid')
-                if not reset_overlay:
-                    # remove HWID from NAND overlay
-                    ssh.run('mount', '-t', 'ubifs', '/dev/ubi0_2', '/mnt')
-                    sftp.remove('/mnt/upper/etc/miner_hwid')
-                    ssh.run('umount', '/mnt')
 
             if reset_uboot_env:
                 logging.info("Erasing NAND partition 'uboot_env'...")
