@@ -43,7 +43,7 @@ class Builder:
     CONFIG_NAME = '.config'
     MINER_MAC = 'ethaddr'
     MINER_HWID = 'miner_hwid'
-    MINER_PLATFORM = 'miner_platform'
+    MINER_PLATFORM = 'miner_hwver'
     MINER_FIRMWARE = 'firmware'
     MINER_CFG_SIZE = 0x20000
 
