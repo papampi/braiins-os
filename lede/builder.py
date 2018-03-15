@@ -47,7 +47,7 @@ class Builder:
     MINER_FIRMWARE = 'firmware'
     MINER_CFG_SIZE = 0x20000
 
-    MTD_BITSTREAM = 'system'
+    MTD_BITSTREAM = 'fpga'
 
     def __init__(self, config, argv):
         """
@@ -467,17 +467,28 @@ class Builder:
         with open(image_path, "rb") as image_file, ssh.pipe('mtd', 'write', '-', device) as remote:
             shutil.copyfileobj(image_file, remote.stdin)
 
+    def _get_bitstream_mtd_name(self, index) -> str:
+        """
+        Return MTD device name for selected firmware
+
+        :param index:
+            Index of firmware partition.
+        :return:
+            String with name of MTD device.
+        """
+        return self.MTD_BITSTREAM + str(index)
+
     @staticmethod
     def _get_firmware_mtd(index) -> str:
         """
-        Return MTD device for current firmware
+        Return MTD device for selected firmware
 
         :param index:
             Index of firmware partition.
         :return:
             String with path to MTD device.
         """
-        return '/dev/mtd' + {1: '6', 2: '7'}.get(index)
+        return '/dev/mtd' + {1: '7', 2: '8'}.get(index)
 
     def _deploy_ssh_sd(self, ssh, sftp, image):
         """
@@ -520,6 +531,8 @@ class Builder:
         :param image:
             Paths to firmware images.
         """
+        platform = self._config.miner.platform
+
         boot_images = (
             (image.boot, 'boot'),
             (image.uboot, 'uboot')
@@ -533,6 +546,21 @@ class Builder:
             ('nand_firmware2', 2)
         )
         targets = self._config.deploy.targets
+
+        if self._config.deploy.write_bitstream == 'yes':
+            bitstream = {
+                'G9': os.path.join('g9', 'bin', 'system.bit'),
+                'G19': os.path.join('g19', 'bin', 'system.bit')
+            }
+            platform_dir = self._get_repo(self.PLATFORM).working_dir
+            local = os.path.join(platform_dir, bitstream[platform])
+
+            mtds = (self._get_bitstream_mtd_name(i) for name, i in firmwares if name in targets)
+            for mtd_name in mtds:
+                logging.info("Writing bitstream for platform '{}' to NAND partition '{}'..."
+                             .format(platform, mtd_name))
+                self._mtd_write(ssh, local, mtd_name)
+
         mtds = ((name[5:], self._get_firmware_mtd(i)) for name, i in firmwares if name in targets)
         for firmware, mtd in mtds:
             if self._config.deploy.factory_image == 'yes':
@@ -595,19 +623,6 @@ class Builder:
                 self._deploy_ssh_sd(ssh, sftp, image_sd)
             if image_nand:
                 self._deploy_ssh_nand(ssh, image_nand)
-
-            # write miner configuration to miner_cfg NAND
-            if self._config.deploy.write_bitstream == 'yes':
-                bitstream = {
-                    'G9': os.path.join('g9', 'bin', 'system.bit'),
-                    'G19': os.path.join('g19', 'bin', 'system.bit')
-                }
-                platform = self._config.miner.platform
-                platform_dir = self._get_repo(self.PLATFORM).working_dir
-                logging.info("Writing bitstream for platform '{}' to NAND partition '{}'..."
-                             .format(platform, self.MTD_BITSTREAM))
-                local = os.path.join(platform_dir, bitstream[platform])
-                self._mtd_write(ssh, local, self.MTD_BITSTREAM)
 
             # write miner configuration to miner_cfg NAND
             if self._config.deploy.write_miner_cfg == 'yes':
