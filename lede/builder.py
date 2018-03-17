@@ -43,7 +43,7 @@ class Builder:
     CONFIG_NAME = '.config'
     MINER_MAC = 'ethaddr'
     MINER_HWID = 'miner_hwid'
-    MINER_PLATFORM = 'miner_hwver'
+    MINER_HWVER = 'miner_hwver'
     MINER_FIRMWARE = 'firmware'
     MINER_CFG_SIZE = 0x20000
 
@@ -490,6 +490,14 @@ class Builder:
         """
         return '/dev/mtd' + {1: '7', 2: '8'}.get(index)
 
+    def _get_hw_version(self) -> str:
+        """
+        Return hardware version for selected platform
+        :return:
+            String with hardware version.
+        """
+        return '-'.join(self._config.miner.platform.split('-')[1:])
+
     def _deploy_ssh_sd(self, ssh, sftp, image):
         """
         Deploy image to the SD card over SSH connection
@@ -549,8 +557,8 @@ class Builder:
 
         if self._config.deploy.write_bitstream == 'yes':
             bitstream = {
-                'G9': os.path.join('g9', 'bin', 'system.bit'),
-                'G19': os.path.join('g19', 'bin', 'system.bit')
+                'zynq-dm1-g9': os.path.join('g9', 'bin', 'system.bit'),
+                'zynq-dm1-g19': os.path.join('g19', 'bin', 'system.bit')
             }
             platform_dir = self._get_repo(self.PLATFORM).working_dir
             local = os.path.join(platform_dir, bitstream[platform])
@@ -636,7 +644,7 @@ class Builder:
                       '{}={}\n' \
                       ''.format(self.MINER_MAC, self._config.miner.mac,
                                 self.MINER_HWID, self._config.miner.hwid,
-                                self.MINER_PLATFORM, self._config.miner.platform)
+                                self.MINER_HWVER, self._get_hw_version())
                 output = self._run(mkenvimage, '-r', '-p', str(0), '-s', str(self.MINER_CFG_SIZE), '-',
                                    input=input.encode(), output=True)
                 logging.info("Writing miner configuration to NAND partition 'miner_cfg'...")
@@ -694,6 +702,8 @@ class Builder:
         """
         Deploy Miner firmware to target platform
         """
+        platform = self._config.miner.platform
+
         ImageSd = namedtuple('ImageSd', ['boot', 'uboot', 'kernel'])
         ImageNand = namedtuple('ImageNand', ['boot', 'uboot', 'factory', 'sysupgrade'])
 
@@ -712,19 +722,19 @@ class Builder:
                     raise BuilderStop
 
             if 'sd' in targets:
-                uboot_dir = 'uboot-zynq-miner-sd'
+                uboot_dir = 'uboot-{}-sd'.format(platform)
                 images['sd'] = ImageSd(
                     boot=os.path.join(generic_dir, uboot_dir, 'boot.bin'),
                     uboot=os.path.join(generic_dir, uboot_dir, 'u-boot.img'),
-                    kernel=os.path.join(generic_dir, 'lede-zynq-miner-sd-squashfs-fit.itb')
+                    kernel=os.path.join(generic_dir, 'lede-{}-sd-squashfs-fit.itb'.format(platform))
                 )
             if any(target in targets for target in ('nand_firmware1', 'nand_firmware2')):
-                uboot_dir = 'uboot-zynq-miner-nand'
+                uboot_dir = 'uboot-{}'.format(platform)
                 images['nand'] = ImageNand(
                     boot=os.path.join(generic_dir, uboot_dir, 'boot.bin'),
                     uboot=os.path.join(generic_dir, uboot_dir, 'u-boot.img'),
-                    factory=os.path.join(generic_dir, 'lede-zynq-miner-nand-squashfs-factory.bin'),
-                    sysupgrade=os.path.join(generic_dir, 'lede-zynq-miner-nand-squashfs-sysupgrade.tar')
+                    factory=os.path.join(generic_dir, 'lede-{}-squashfs-factory.bin'.format(platform)),
+                    sysupgrade=os.path.join(generic_dir, 'lede-{}-squashfs-sysupgrade.tar'.format(platform))
                 )
 
         self._deploy_ssh(images)
