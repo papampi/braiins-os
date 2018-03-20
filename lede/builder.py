@@ -43,7 +43,6 @@ class Builder:
     CONFIG_NAME = '.config'
     MINER_MAC = 'ethaddr'
     MINER_HWID = 'miner_hwid'
-    MINER_HWVER = 'miner_hwver'
     MINER_FIRMWARE = 'firmware'
     MINER_CFG_SIZE = 0x20000
 
@@ -641,10 +640,8 @@ class Builder:
                     raise BuilderStop
                 input='{}={}\n' \
                       '{}={}\n' \
-                      '{}={}\n' \
                       ''.format(self.MINER_MAC, self._config.miner.mac,
-                                self.MINER_HWID, self._config.miner.hwid,
-                                self.MINER_HWVER, self._get_hw_version())
+                                self.MINER_HWID, self._config.miner.hwid)
                 output = self._run(mkenvimage, '-r', '-p', str(0), '-s', str(self.MINER_CFG_SIZE), '-',
                                    input=input.encode(), output=True)
                 logging.info("Writing miner configuration to NAND partition 'miner_cfg'...")
