@@ -477,6 +477,20 @@ class Builder:
         """
         return self.MTD_BITSTREAM + str(index)
 
+    def _get_bitstream_path(self) -> str:
+        """
+        Return path to FPGA bitstream for selected platform
+
+        :return:
+            String with path to FPGA bitstream.
+        """
+        bitstream = {
+            'zynq-dm1-g9': os.path.join('g9', 'bin', 'system.bit'),
+            'zynq-dm1-g19': os.path.join('g19', 'bin', 'system.bit')
+        }
+        platform_dir = self._get_repo(self.PLATFORM).working_dir
+        return os.path.join(platform_dir, bitstream[self._config.miner.platform])
+
     @staticmethod
     def _get_firmware_mtd(index) -> str:
         """
@@ -519,6 +533,7 @@ class Builder:
         upload = (
             (image.boot, 'boot.bin'),
             (image.uboot, 'u-boot.img'),
+            (image.fpga, 'system.bit'),
             (image.kernel, 'fit.itb')
         )
         for local, remote in upload:
@@ -555,18 +570,11 @@ class Builder:
         targets = self._config.deploy.targets
 
         if self._config.deploy.write_bitstream == 'yes':
-            bitstream = {
-                'zynq-dm1-g9': os.path.join('g9', 'bin', 'system.bit'),
-                'zynq-dm1-g19': os.path.join('g19', 'bin', 'system.bit')
-            }
-            platform_dir = self._get_repo(self.PLATFORM).working_dir
-            local = os.path.join(platform_dir, bitstream[platform])
-
             mtds = (self._get_bitstream_mtd_name(i) for name, i in firmwares if name in targets)
             for mtd_name in mtds:
                 logging.info("Writing bitstream for platform '{}' to NAND partition '{}'..."
                              .format(platform, mtd_name))
-                self._mtd_write(ssh, local, mtd_name)
+                self._mtd_write(ssh, image.fpga, mtd_name)
 
         mtds = ((name[5:], self._get_firmware_mtd(i)) for name, i in firmwares if name in targets)
         for firmware, mtd in mtds:
@@ -701,8 +709,8 @@ class Builder:
         """
         platform = self._config.miner.platform
 
-        ImageSd = namedtuple('ImageSd', ['boot', 'uboot', 'kernel'])
-        ImageNand = namedtuple('ImageNand', ['boot', 'uboot', 'factory', 'sysupgrade'])
+        ImageSd = namedtuple('ImageSd', ['boot', 'uboot', 'fpga', 'kernel'])
+        ImageNand = namedtuple('ImageNand', ['boot', 'uboot', 'fpga', 'factory', 'sysupgrade'])
 
         targets = self._config.deploy.get('targets', None)
 
@@ -723,6 +731,7 @@ class Builder:
                 images['sd'] = ImageSd(
                     boot=os.path.join(generic_dir, uboot_dir, 'boot.bin'),
                     uboot=os.path.join(generic_dir, uboot_dir, 'u-boot.img'),
+                    fpga=self._get_bitstream_path(),
                     kernel=os.path.join(generic_dir, 'lede-{}-sd-squashfs-fit.itb'.format(platform))
                 )
             if any(target in targets for target in ('nand_firmware1', 'nand_firmware2')):
@@ -730,6 +739,7 @@ class Builder:
                 images['nand'] = ImageNand(
                     boot=os.path.join(generic_dir, uboot_dir, 'boot.bin'),
                     uboot=os.path.join(generic_dir, uboot_dir, 'u-boot.img'),
+                    fpga=self._get_bitstream_path(),
                     factory=os.path.join(generic_dir, 'lede-{}-squashfs-factory.bin'.format(platform)),
                     sysupgrade=os.path.join(generic_dir, 'lede-{}-squashfs-sysupgrade.tar'.format(platform))
                 )
