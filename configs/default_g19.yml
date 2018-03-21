@@ -1,6 +1,6 @@
 miner:
-    # possible platforms are G9, G19
-    platform: G19
+    # possible platforms are zynq-dm1-g9, zynq-dm1-g19
+    platform: zynq-dm1-g19
     # default miner MAC address
     mac: 00:0A:35:FF:FF:FF
     # miner HW identifier (dd if=/dev/random bs=1 count=12 2>/dev/null | base64)
@@ -21,8 +21,6 @@ build:
     jobs: 4
     # show all commands during build process
     verbose: no
-    # path to Xilinx SDK
-    xilinx_sdk: ~/opt/xilinx/SDK/2017.2
     # target aliases for LEDE build system
     aliases:
         kernel: target/linux
@@ -76,8 +74,6 @@ deploy:
     reboot: no
     # remove UUID from SD card
     remove_extroot_uuid: yes
-    # remove /etc/miner_hwid which will be generated during reboot
-    remove_miner_hwid: no
     # set U-Boot environment with miner configuration (MAC, HWID, firmware)
     # it is useful for changing HWID when SD card is inserted
     # SD card U-Boot cannot write to the NAND directly
