@@ -62,18 +62,19 @@ deploy:
     # default target NAND or SD card
     targets:
         - sd
+#        - nand_recovery
 #        - nand_firmware1
 #        - nand_firmware2
     # use factory or sysupgrade image for formating/updating UBI partition
     # for first load is needed factory image
     # factory image swipes rootfs_data overlay!
-    factory_image: no
+    factory_image: yes
     # write FPGA bitstream to NAND
     write_bitstream: no
     # reboot miner after successful deploy
     reboot: no
     # remove UUID from SD card
-    remove_extroot_uuid: yes
+    remove_extroot_uuid: no
     # set U-Boot environment with miner configuration (MAC, HWID, firmware)
     # it is useful for changing HWID when SD card is inserted
     # SD card U-Boot cannot write to the NAND directly

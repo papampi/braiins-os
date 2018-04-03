@@ -62,6 +62,7 @@ deploy:
     # default target NAND or SD card
     targets:
         - sd
+#        - nand_recovery
 #        - nand_firmware1
 #        - nand_firmware2
     # use factory or sysupgrade image for formating/updating UBI partition

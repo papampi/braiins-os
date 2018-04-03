@@ -2,6 +2,7 @@ import logging
 import subprocess
 import shutil
 import tarfile
+import gzip
 import git
 import os
 import sys
@@ -64,15 +65,6 @@ class Builder:
         self._working_dir = None
         self._repos = OrderedDict()
         self._init_repos()
-
-    @contextmanager
-    def pipe(self, *args):
-        """
-        Context manager for running system command in LEDE source directory
-
-        :return:
-            RemoteProcess with stdin, stdout and stderr.
-        """
 
     def _run(self, *args, path=None, input=None, output=False, init=None):
         """
@@ -452,7 +444,7 @@ class Builder:
         """
         stream.write("{}={}\n".format(self.MINER_MAC, self._config.miner.mac))
 
-    def _mtd_write(self, ssh, image_path: str, device: str):
+    def _mtd_write(self, ssh, image_path: str, device: str, offset: int=0, compress: bool=False, erase: bool=True):
         """
         Write image to remote NAND partition
 
@@ -462,9 +454,24 @@ class Builder:
             Path to local image file.
         :param device:
             Name of NAND partition for writing image.
+        :param offset:
+            Skip the first n bytes.
+        :param compress:
+            Compress data with gzip before write to NAND.
+        :param erase:
+            Write first erasing the blocks.
         """
-        with open(image_path, "rb") as image_file, ssh.pipe('mtd', 'write', '-', device) as remote:
-            shutil.copyfileobj(image_file, remote.stdin)
+        command = ['mtd']
+        if not erase:
+            command.append('-n')
+        if offset:
+            command.extend(('-p', str(offset)))
+        command.extend(('write', '-', device))
+        with open(image_path, "rb") as image_file, ssh.pipe(command) as remote:
+            if compress:
+                remote.stdin.write(gzip.compress(image_file.read()))
+            else:
+                shutil.copyfileobj(image_file, remote.stdin)
 
     def _get_bitstream_mtd_name(self, index) -> str:
         """
@@ -511,6 +518,23 @@ class Builder:
         """
         return '-'.join(self._config.miner.platform.split('-')[1:])
 
+    def _write_uboot(self, ssh, image):
+        """
+        Write SPL and U-Boot to NAND over SSH connection
+
+        :param ssh:
+            Connected SSH client.
+        :param image:
+            Paths to firmware images.
+        """
+        boot_images = (
+            (image.boot, 'boot'),
+            (image.uboot, 'uboot')
+        )
+        for local, mtd in boot_images:
+            logging.info("Writing '{}' to NAND partition '{}'...".format(os.path.basename(local), mtd))
+            self._mtd_write(ssh, local, mtd)
+
     def _deploy_ssh_sd(self, ssh, sftp, image):
         """
         Deploy image to the SD card over SSH connection
@@ -542,11 +566,44 @@ class Builder:
 
         ssh.run('umount', '/mnt')
 
+    def _deploy_ssh_recovery(self, ssh, image):
+        """
+        Deploy image to the NAND recovery over SSH connection
+
+        It is required that remote system has been booted from SD card or recovery partition!
+
+        :param ssh:
+            Connected SSH client.
+        :param image:
+            Paths to firmware images.
+        """
+        mtd_name = 'recovery'
+
+        self._write_uboot(ssh, image)
+
+        # erase device before formating
+        ssh.run('mtd', 'erase', mtd_name)
+
+        local = image.recovery
+        logging.info("Writing '{}' to NAND partition '{}'..."
+                     .format(os.path.basename(local), mtd_name))
+        self._mtd_write(ssh, local, mtd_name)
+
+        local = image.factory
+        logging.info("Writing '{}' to NAND partition '{}'..."
+                     .format(os.path.basename(local), mtd_name))
+        self._mtd_write(ssh, local, mtd_name, offset=0x800000, compress=True, erase=False)
+
+        local = image.fpga
+        logging.info("Writing '{}' to NAND partition '{}'..."
+                     .format(os.path.basename(local), mtd_name))
+        self._mtd_write(ssh, local, mtd_name, offset=0x1400000, compress=True, erase=False)
+
     def _deploy_ssh_nand(self, ssh, image):
         """
         Deploy image to the NAND over SSH connection
 
-        It is required that remote system has been booted from SD card!
+        It is required that remote system has been booted from SD card or recovery partition!
 
         :param ssh:
             Connected SSH client.
@@ -555,13 +612,7 @@ class Builder:
         """
         platform = self._config.miner.platform
 
-        boot_images = (
-            (image.boot, 'boot'),
-            (image.uboot, 'uboot')
-        )
-        for local, mtd in boot_images:
-            logging.info("Writing '{}' to NAND partition '{}'...".format(os.path.basename(local), mtd))
-            self._mtd_write(ssh, local, mtd)
+        self._write_uboot(ssh, image)
 
         firmwares = (
             ('nand_firmware1', 1),
@@ -574,7 +625,7 @@ class Builder:
             for mtd_name in mtds:
                 logging.info("Writing bitstream for platform '{}' to NAND partition '{}'..."
                              .format(platform, mtd_name))
-                self._mtd_write(ssh, image.fpga, mtd_name)
+                self._mtd_write(ssh, image.fpga, mtd_name, compress=True)
 
         mtds = ((name[5:], self._get_firmware_mtd(i)) for name, i in firmwares if name in targets)
         for firmware, mtd in mtds:
@@ -632,10 +683,13 @@ class Builder:
             sftp = ssh.open_sftp()
 
             image_sd = images.get('sd')
+            image_recovery = images.get('recovery')
             image_nand = images.get('nand')
 
             if image_sd:
                 self._deploy_ssh_sd(ssh, sftp, image_sd)
+            if image_recovery:
+                self._deploy_ssh_recovery(ssh, image_recovery)
             if image_nand:
                 self._deploy_ssh_nand(ssh, image_nand)
 
@@ -710,6 +764,7 @@ class Builder:
         platform = self._config.miner.platform
 
         ImageSd = namedtuple('ImageSd', ['boot', 'uboot', 'fpga', 'kernel'])
+        ImageRecovery = namedtuple('ImageRecovery', ['boot', 'uboot', 'fpga', 'recovery', 'factory'])
         ImageNand = namedtuple('ImageNand', ['boot', 'uboot', 'fpga', 'factory', 'sysupgrade'])
 
         targets = self._config.deploy.get('targets', None)
@@ -722,7 +777,7 @@ class Builder:
         images = {}
         if targets:
             for target in targets:
-                if target not in ['sd', 'nand_firmware1', 'nand_firmware2']:
+                if target not in ['sd', 'nand_recovery', 'nand_firmware1', 'nand_firmware2']:
                     logging.error("Unsupported target '{}' for firmware image".format(target))
                     raise BuilderStop
 
@@ -733,6 +788,15 @@ class Builder:
                     uboot=os.path.join(generic_dir, uboot_dir, 'u-boot.img'),
                     fpga=self._get_bitstream_path(),
                     kernel=os.path.join(generic_dir, 'lede-{}-sd-squashfs-fit.itb'.format(platform))
+                )
+            if 'nand_recovery' in targets:
+                uboot_dir = 'uboot-{}'.format(platform)
+                images['recovery'] = ImageRecovery(
+                    boot=os.path.join(generic_dir, uboot_dir, 'boot.bin'),
+                    uboot=os.path.join(generic_dir, uboot_dir, 'u-boot.img'),
+                    fpga=self._get_bitstream_path(),
+                    recovery=os.path.join(generic_dir, 'lede-{}-recovery-squashfs-fit.itb'.format(platform)),
+                    factory=os.path.join(generic_dir, 'lede-{}-squashfs-factory.bin'.format(platform))
                 )
             if any(target in targets for target in ('nand_firmware1', 'nand_firmware2')):
                 uboot_dir = 'uboot-{}'.format(platform)
