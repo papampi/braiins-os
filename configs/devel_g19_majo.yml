@@ -1,0 +1,98 @@
+miner:
+    # possible platforms are zynq-dm1-g9, zynq-dm1-g19
+    platform: zynq-dm1-g19
+    # default miner MAC address
+    mac: 50:6C:BE:08:52:E1
+    # miner HW identifier (dd if=/dev/random bs=1 count=12 2>/dev/null | base64)
+    hwid: cKWVxvQgCzs1q5fA
+    # select NAND firmware which is used for boot
+    firmware: 1
+
+build:
+    # name of subdirectory in the build directory
+    name: devel_g19_majo
+    # file with default LEDE configuration
+    config: defaults/devel_g19_majo.conf
+    # always copy default configuration file
+    config_always: no
+    # relative or absolute path to the build directory
+    dir: build
+    # specifies the number of jobs to run simultaneously
+    jobs: 4
+    # show all commands during build process
+    verbose: no
+    # target aliases for LEDE build system
+    aliases:
+        kernel: target/linux
+        cgminer: package/utils/cgminer
+
+remote:
+    # default branch for repositories
+    branch: braiins-majo
+    # always fetch latest source code
+    fetch: no
+
+    # list of remote repositories
+    repos:
+        lede:
+            uri: git@gitlab.bo:x/lede.git
+        luci:
+            uri: git@gitlab.bo:x/luci.git
+            branch: braiins
+        platform:
+            uri: git@gitlab.bo:x/zynq_platform.git
+        u-boot:
+            uri: git@gitlab.bo:x/u-boot-xlnx.git
+        linux:
+            uri: git@gitlab.bo:x/linux-xlnx.git
+        cgminer:
+            uri: git@gitlab.bo:x/cgminer.git
+
+feeds:
+    # always create feeds.conf
+    create_always: no
+    # always update feeds
+    update_always: no
+    # always install feeds
+    install_always: no
+
+deploy:
+    # default target NAND or SD card
+    targets:
+        - sd
+#        - nand_firmware1
+#        - nand_firmware2
+    # use factory or sysupgrade image for formating/updating UBI partition
+    # for first load is needed factory image
+    # factory image swipes rootfs_data overlay!
+    factory_image: yes
+    # write FPGA bitstream to NAND
+    write_bitstream: no
+    # reboot miner after successful deploy
+    reboot: no
+    # remove UUID from SD card
+    remove_extroot_uuid: no
+    # set U-Boot environment with miner configuration (MAC, HWID, firmware)
+    # it is useful for changing HWID when SD card is inserted
+    # SD card U-Boot cannot write to the NAND directly
+    set_miner_env: no
+    # overwrite NAND with new miner configuration (MAC, HWID)
+    # it is also necessary to reset uboot_env and overlay/extroot
+    write_miner_cfg: no
+    # erase U-Boot environment and set it to default one after reboot
+    reset_uboot_env: no
+    # erase NAND/UBI overlay (rootfs_data) and reinit it after reboot
+    # it is erased only overlay for current firmware (selected by miner.firmware)
+    reset_overlay: no
+    # erase SD card overlay and reinit it after reboot
+    reset_extroot: no
+
+    # setting for deploy over SSH connection
+    ssh:
+        # hostname suffix which is appended to generated hostname 'miner-xxyyzz'
+        # where xxyyzz are last three numbers from MAC address
+        hostname_suffix: .bo
+        # ssh username
+        username: root
+        # ssh password
+        password:
