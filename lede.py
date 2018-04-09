@@ -42,7 +42,7 @@ class CommandManager:
     def build(self):
         logging.debug("Called command 'build'")
         self._builder.prepare()
-        self._builder.build(targets=self._args.target, verbose=self._args.verbose)
+        self._builder.build(targets=self._args.target, jobs=self._args.jobs, verbose=self._args.verbose)
 
     def deploy(self):
         logging.debug("Called command 'deploy'")
@@ -102,6 +102,9 @@ def main(argv):
     subparser = subparsers.add_parser('build',
                                       help="build image for current configuration")
     subparser.set_defaults(func=command.build)
+
+    subparser.add_argument('-j', '--jobs', type=int,
+                           help='specifies the number of jobs to run simultaneously')
 
     subparser.add_argument('-v', '--verbose', action='store_true',
                            help='show all commands during build process')

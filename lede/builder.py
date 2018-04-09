@@ -401,7 +401,7 @@ class Builder:
             logging.info("Start Linux kernel configuration...'")
             self._config_kernel()
 
-    def build(self, targets=None, verbose=False):
+    def build(self, targets=None, jobs=None, verbose=False):
         """
         Build the Miner firmware for current configuration
 
@@ -413,11 +413,13 @@ class Builder:
         :param targets:
             List of targets for build. Target is specified as an alias to real LEDE target.
             The aliases are stored in configuration file under `build.aliases`
+        :param jobs:
+            Specifies the number of jobs (commands) to run simultaneously.
         :param verbose:
             Force to show all commands called from make build system.
         """
         logging.info("Start building LEDE...'")
-        jobs = self._config.build.get('jobs', 1)
+        jobs = jobs or self._config.build.get('jobs', 1)
         verbose = verbose or self._config.build.get('verbose', 'no') == 'yes'
 
         # set PATH environment variable
