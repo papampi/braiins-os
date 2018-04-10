@@ -58,10 +58,21 @@ feeds:
     # always install feeds
     install_always: no
 
+uenv:
+    # boot Linux from SD instead of NAND
+    mac: yes
+    # reset firmware to factory settings
+    factory_reset: no
+    # use for factory reset images from SD
+    sd_images: no
+    # boot Linux from SD instead of NAND
+    sd_boot: no
+
 deploy:
     # default target NAND or SD card
     targets:
         - sd
+#        - sd_recovery
 #        - nand_recovery
 #        - nand_firmware1
 #        - nand_firmware2
