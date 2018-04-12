@@ -52,6 +52,8 @@ class Builder:
     MINER_FIRMWARE = 'firmware'
     MINER_CFG_SIZE = 0x20000
 
+    UENV_TXT = 'uEnv.txt'
+
     MTD_BITSTREAM = 'fpga'
 
     def __init__(self, config, argv):
@@ -554,27 +556,17 @@ class Builder:
             logging.info("Writing '{}' to NAND partition '{}'...".format(os.path.basename(local), mtd))
             self._mtd_write(ssh, local, mtd)
 
-    def _deploy_ssh_sd(self, ssh, sftp, image):
+    def _upload_images(self, upload_manager, image, recovery: bool=False):
         """
-        Deploy image to the SD card over SSH connection
+        Upload all image files using upload manager
 
-        :param ssh:
-            Connected SSH client.
-        :param sftp:
-            Opened SFTP connection by SSH client.
+        :param upload_manager:
+            Upload manager for images transfer.
         :param image:
             Paths to firmware images.
+        :param recovery:
+            Transfer recovery images.
         """
-        recovery = isinstance(image, ImageRecovery)
-
-        ssh.run('mount', '/dev/mmcblk0p1', '/mnt')
-        sftp.chdir('/mnt')
-
-        logging.info("Creating 'uEnv.txt'...")
-        with sftp.open('uEnv.txt', 'w') as file:
-            self._write_uenv(file, recovery)
-
-        # upload all files to the SD card
         upload = [
             (image.boot, 'boot.bin'),
             (image.uboot, 'u-boot.img'),
@@ -585,8 +577,34 @@ class Builder:
             upload.append((image.factory, 'factory.bin'))
 
         for local, remote in upload:
-            logging.info("Uploading '{}'...".format(remote))
-            sftp.put(local, remote)
+            upload_manager.put(local, remote)
+
+    def _deploy_ssh_sd(self, ssh, sftp, image, recovery: bool):
+        """
+        Deploy image to the SD card over SSH connection
+
+        :param ssh:
+            Connected SSH client.
+        :param sftp:
+            Opened SFTP connection by SSH client.
+        :param image:
+            Paths to firmware images.
+        :param recovery:
+            Transfer recovery images.
+        """
+        class UploadManager:
+            def __init__(self, sftp):
+                self.sftp = sftp
+
+            def put(self, src, dst):
+                logging.info("Uploading '{}'...".format(dst))
+                self.sftp.put(src, dst)
+
+        ssh.run('mount', '/dev/mmcblk0p1', '/mnt')
+        sftp.chdir('/mnt')
+
+        # start uploading
+        self._upload_images(UploadManager(sftp), image, recovery)
 
         ssh.run('umount', '/mnt')
 
@@ -679,7 +697,97 @@ class Builder:
                             shutil.copyfileobj(image_file, remote.stdin)
                 ssh.run('ubidetach', '-p', mtd)
 
-    def _deploy_ssh(self, images):
+    def _config_ssh_sd(self, ssh, sftp, recovery: bool):
+        """
+        Change configuration on SD card over SSH connection
+
+        :param ssh:
+            Connected SSH client.
+        :param sftp:
+            Opened SFTP connection by SSH client.
+        :param recovery:
+            Use options for recovery image.
+        """
+        reset_extroot = self._config.deploy.reset_extroot == 'yes'
+        remove_extroot_uuid = self._config.deploy.remove_extroot_uuid == 'yes'
+
+        # create uEnv.txt for U-Boot external configuration
+        ssh.run('mount', '/dev/mmcblk0p1', '/mnt')
+        sftp.chdir('/mnt')
+
+        logging.info("Creating '{}'...".format(self.UENV_TXT))
+        with sftp.open(self.UENV_TXT, 'w') as file:
+            self._write_uenv(file, recovery)
+
+        ssh.run('umount', '/mnt')
+
+        # delete the whole extroot or delete extroot UUID
+        if reset_extroot or remove_extroot_uuid:
+            ssh.run('mount', '/dev/mmcblk0p2', '/mnt')
+            sftp.chdir('/mnt')
+
+            if reset_extroot:
+                logging.info("Removing all data from extroot...")
+                ssh.run('rm', '-fr', '/mnt/*')
+            elif '.extroot-uuid' in sftp.listdir('etc'):
+                logging.info("Removing extroot UUID...")
+                sftp.remove('etc/.extroot-uuid')
+
+            ssh.run('umount', '/mnt')
+
+    def _config_ssh_nand(self, ssh):
+        """
+        Change configuration on NAND over SSH connection
+
+        :param ssh:
+            Connected SSH client.
+        """
+        # write miner configuration to miner_cfg NAND
+        if self._config.deploy.write_miner_cfg == 'yes':
+            mkenvimage = os.path.join(self._working_dir,
+                                      'build_dir', 'host', 'u-boot-2014.10', 'tools', 'mkenvimage')
+            if not os.path.exists(mkenvimage):
+                logging.error("Missing utility '{}'".format(mkenvimage))
+                raise BuilderStop
+            input = '{}={}\n' \
+                    '{}={}\n' \
+                    ''.format(self.MINER_MAC, self._config.miner.mac,
+                              self.MINER_HWID, self._config.miner.hwid)
+            output = self._run(mkenvimage, '-r', '-p', str(0), '-s', str(self.MINER_CFG_SIZE), '-',
+                               input=input.encode(), output=True)
+            logging.info("Writing miner configuration to NAND partition 'miner_cfg'...")
+            with ssh.pipe('mtd', 'write', '-', 'miner_cfg') as remote:
+                remote.stdin.write(output)
+
+        # change miner configuration in U-Boot env
+        if self._config.deploy.set_miner_env == 'yes' and self._config.deploy.reset_uboot_env == 'no':
+            logging.info("Writing miner configuration to U-Boot env in NAND...")
+            ssh.run('fw_setenv', self.MINER_MAC, self._config.miner.mac)
+            ssh.run('fw_setenv', self.MINER_HWID, self._config.miner.hwid)
+            ssh.run('fw_setenv', self.MINER_FIRMWARE, str(self._config.miner.firmware))
+
+        reset_uboot_env = self._config.deploy.reset_uboot_env == 'yes'
+        reset_overlay = self._config.deploy.reset_overlay == 'yes'
+
+        ubi_attach = reset_overlay
+
+        if ubi_attach:
+            firmware_mtd = self._get_firmware_mtd(self._config.miner.firmware)
+            ssh.run('ubiattach', '-p', firmware_mtd)
+
+        if reset_uboot_env:
+            logging.info("Erasing NAND partition 'uboot_env'...")
+            ssh.run('mtd', 'erase', 'uboot_env')
+
+        # truncate overlay for current firmware
+        if reset_overlay:
+            logging.info("Truncating UBI volume 'rootfs_data'...")
+            ssh.run('ubiupdatevol', '/dev/ubi0_2', '-t')
+
+        if ubi_attach:
+            ssh.run('ubidetach', '-p', firmware_mtd)
+
+    def _deploy_ssh(self, images, sd_config: bool, nand_config: bool):
         """
         Deploy NAND or SD card image over SSH connection
 
@@ -693,6 +801,10 @@ class Builder:
             - erase NAND partitions to set it to the default state
             - remove extroot UUID
             - overwrite miner configuration with new MAC or HW ID
+        :param sd_config:
+            Modify configuration files on SD card.
+        :param nand_config:
+            Modify configuration files/partitions on NAND.
         """
         hostname = self._config.deploy.ssh.get('hostname', None)
         password = self._config.deploy.ssh.get('password', None)
@@ -707,82 +819,101 @@ class Builder:
             sftp = ssh.open_sftp()
 
             image_sd = images.get('sd')
-            image_sd_recovery = images.get('sd_recovery')
             image_nand_recovery = images.get('nand_recovery')
             image_nand = images.get('nand')
 
+            sd_recovery = image_sd and isinstance(image_sd, ImageRecovery)
+
             if image_sd:
-                self._deploy_ssh_sd(ssh, sftp, image_sd)
-            if image_sd_recovery:
-                self._deploy_ssh_sd(ssh, sftp, image_sd_recovery)
+                self._deploy_ssh_sd(ssh, sftp, image_sd, sd_recovery)
+            if sd_config:
+                self._config_ssh_sd(ssh, sftp, sd_recovery)
             if image_nand_recovery:
                 self._deploy_ssh_nand_recovery(ssh, image_nand_recovery)
             if image_nand:
                 self._deploy_ssh_nand(ssh, image_nand)
-
-            # write miner configuration to miner_cfg NAND
-            if self._config.deploy.write_miner_cfg == 'yes':
-                mkenvimage = os.path.join(self._working_dir,
-                                          'build_dir', 'host', 'u-boot-2014.10', 'tools', 'mkenvimage')
-                if not os.path.exists(mkenvimage):
-                    logging.error("Missing utility '{}'".format(mkenvimage))
-                    raise BuilderStop
-                input='{}={}\n' \
-                      '{}={}\n' \
-                      ''.format(self.MINER_MAC, self._config.miner.mac,
-                                self.MINER_HWID, self._config.miner.hwid)
-                output = self._run(mkenvimage, '-r', '-p', str(0), '-s', str(self.MINER_CFG_SIZE), '-',
-                                   input=input.encode(), output=True)
-                logging.info("Writing miner configuration to NAND partition 'miner_cfg'...")
-                with ssh.pipe('mtd', 'write', '-', 'miner_cfg') as remote:
-                    remote.stdin.write(output)
-
-            # change miner configuration in U-Boot env
-            if self._config.deploy.set_miner_env == 'yes' and self._config.deploy.reset_uboot_env == 'no':
-                logging.info("Writing miner configuration to U-Boot env in NAND...")
-                ssh.run('fw_setenv', self.MINER_MAC, self._config.miner.mac)
-                ssh.run('fw_setenv', self.MINER_HWID, self._config.miner.hwid)
-                ssh.run('fw_setenv', self.MINER_FIRMWARE, str(self._config.miner.firmware))
-
-            reset_extroot = self._config.deploy.reset_extroot == 'yes'
-            remove_extroot_uuid = self._config.deploy.remove_extroot_uuid == 'yes'
-            reset_uboot_env = self._config.deploy.reset_uboot_env == 'yes'
-            reset_overlay = self._config.deploy.reset_overlay == 'yes'
-
-            ubi_attach = reset_overlay
-
-            if ubi_attach:
-                firmware_mtd = self._get_firmware_mtd(self._config.miner.firmware)
-                ssh.run('ubiattach', '-p', firmware_mtd)
-
-            if reset_extroot or remove_extroot_uuid:
-                ssh.run('mount', '/dev/mmcblk0p2', '/mnt')
-                sftp.chdir('/mnt')
-                if reset_extroot:
-                    logging.info("Removing all data from extroot...")
-                    ssh.run('rm', '-fr', '/mnt/*')
-                elif '.extroot-uuid' in sftp.listdir('etc'):
-                    logging.info("Removing extroot UUID...")
-                    sftp.remove('etc/.extroot-uuid')
-                ssh.run('umount', '/mnt')
-
-            if reset_uboot_env:
-                logging.info("Erasing NAND partition 'uboot_env'...")
-                ssh.run('mtd', 'erase', 'uboot_env')
-
-            # truncate overlay for current firmware
-            if reset_overlay:
-                logging.info("Truncating UBI volume 'rootfs_data'...")
-                ssh.run('ubiupdatevol', '/dev/ubi0_2', '-t')
-
-            if ubi_attach:
-                ssh.run('ubidetach', '-p', firmware_mtd)
+            if nand_config:
+                self._config_ssh_nand(ssh)
 
             # reboot system if requested
             if self._config.deploy.reboot == 'yes':
                 ssh.run('reboot')
 
             sftp.close()
+
+    def _get_local_target_dir(self, dir_name: str):
+        """
+        Return path to local target directory
+
+        :param dir_name:
+            Name of target directory.
+        :return:
+            Path to target directory.
+        """
+        target_dir = self._config.local.get(dir_name, None)
+        if not target_dir:
+            logging.error("Missing path for local target '{}'".format(dir_name))
+            raise BuilderStop
+
+        # prepare target directory
+        target_dir = os.path.abspath(target_dir)
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir)
+        return target_dir
+
+    def _write_local_uenv(self, dir_name: str, recovery: bool=False):
+        """
+        Create uEnv.txt file in target directory with specific parameters
+
+        :param dir_name:
+            Name of target directory.
+        :param recovery:
+            Write also recovery parameters.
+        """
+        target_dir = self._get_local_target_dir(dir_name)
+        with open(os.path.join(target_dir, self.UENV_TXT), 'w') as target_file:
+            logging.info("Creating '{}' in '{}'...".format(self.UENV_TXT, target_dir))
+            self._write_uenv(target_file, recovery)
+
+    def _deploy_local(self, images, sd_config: bool, sd_recovery_config: bool):
+        """
+        Deploy NAND or SD card image to local file system
+
+        It can also generate configuration files for SD card version.
+
+        :param images:
+            List of images for deployment.
+        :param sd_config:
+            Generate configuration files for SD card version.
+        :param sd_recovery_config:
+            Generate configuration files for recovery SD card version.
+        """
+        class UploadManager:
+            def __init__(self, target_dir: str):
+                self.target_dir = target_dir
+
+            def put(self, src, dst):
+                logging.info("Copying '{}' to '{}'...".format(dst, self.target_dir))
+                shutil.copyfile(src, os.path.join(self.target_dir, dst))
+
+        image_sd = images.get('sd')
+        image_sd_recovery = images.get('sd_recovery')
+        image_nand_recovery = images.get('nand_recovery')
+
+        if image_sd:
+            target_dir = self._get_local_target_dir('sd')
+            self._upload_images(UploadManager(target_dir), image_sd)
+        if sd_config:
+            self._write_local_uenv('sd_config')
+        if image_sd_recovery:
+            target_dir = self._get_local_target_dir('sd_recovery')
+            self._upload_images(UploadManager(target_dir), image_sd_recovery, recovery=True)
+        if sd_recovery_config:
+            self._write_local_uenv('sd_recovery_config', recovery=True)
+
+        if image_nand_recovery:
+            target_dir = self._get_local_target_dir('nand_recovery')
+            self._upload_images(UploadManager(target_dir), image_nand_recovery, recovery=True)
 
     def _get_recovery_image(self, platform: str, generic_dir: str, uboot_dir: str):
         """
@@ -810,7 +941,6 @@ class Builder:
         Deploy Miner firmware to target platform
         """
         platform = self._config.miner.platform
-
         targets = self._config.deploy.get('targets', None)
 
         logging.info("Start deploying Miner firmware...")
@@ -818,30 +948,58 @@ class Builder:
         generic_dir = os.path.join(self._working_dir, 'bin', 'targets', 'zynq',
                                    'generic' if not self._use_glibc() else 'generic-glibc')
 
-        images = {}
+        supported_targets = [
+            'sd_config',
+            'sd', 'local_sd', 'local_sd_config',
+            'sd_recovery', 'local_sd_recovery', 'local_sd_recovery_config',
+            'nand_config',
+            'nand_recovery', 'local_nand_recovery',
+            'nand_firmware1',
+            'nand_firmware2'
+        ]
+
+        images_ssh = {}
+        images_local = {}
+
         if targets:
             for target in targets:
-                if target not in ['sd', 'sd_recovery', 'nand_recovery', 'nand_firmware1', 'nand_firmware2']:
+                if target not in supported_targets:
                     logging.error("Unsupported target '{}' for firmware image".format(target))
                     raise BuilderStop
 
-            if 'sd' in targets:
+            if all(target in targets for target in ('sd', 'sd_recovery')):
+                logging.error("Targets 'sd' and 'sd_recovery' are mutually exclusive")
+                raise BuilderStop
+
+            if any(target in targets for target in ('sd', 'local_sd')):
                 uboot_dir = 'uboot-{}-sd'.format(platform)
-                images['sd'] = ImageSd(
+                sd = ImageSd(
                     boot=os.path.join(generic_dir, uboot_dir, 'boot.bin'),
                     uboot=os.path.join(generic_dir, uboot_dir, 'u-boot.img'),
                     fpga=self._get_bitstream_path(),
                     kernel=os.path.join(generic_dir, 'lede-{}-sd-squashfs-fit.itb'.format(platform))
                 )
-            if 'sd_recovery' in targets:
+                if 'sd' in targets:
+                    images_ssh['sd'] = sd
+                if 'local_sd' in targets:
+                    images_local['sd'] = sd
+            if any(target in targets for target in ('sd_recovery', 'local_sd_recovery')):
                 uboot_dir = 'uboot-{}-sd'.format(platform)
-                images['sd_recovery'] = self._get_recovery_image(platform, generic_dir, uboot_dir)
-            if 'nand_recovery' in targets:
+                sd_recovery = self._get_recovery_image(platform, generic_dir, uboot_dir)
+                if 'sd_recovery' in targets:
+                    images_ssh['sd'] = sd_recovery
+                if 'local_sd_recovery' in targets:
+                    images_local['sd_recovery'] = sd_recovery
+            if any(target in targets for target in ('nand_recovery', 'local_nand_recovery')):
                 uboot_dir = 'uboot-{}'.format(platform)
-                images['nand_recovery'] = self._get_recovery_image(platform, generic_dir, uboot_dir)
+                nand_recovery = self._get_recovery_image(platform, generic_dir, uboot_dir)
+                if 'nand_recovery' in targets:
+                    images_ssh['nand_recovery'] = nand_recovery
+                if 'local_nand_recovery' in targets:
+                    images_local['nand_recovery'] = nand_recovery
             if any(target in targets for target in ('nand_firmware1', 'nand_firmware2')):
                 uboot_dir = 'uboot-{}'.format(platform)
-                images['nand'] = ImageNand(
+                images_ssh['nand'] = ImageNand(
                     boot=os.path.join(generic_dir, uboot_dir, 'boot.bin'),
                     uboot=os.path.join(generic_dir, uboot_dir, 'u-boot.img'),
                     fpga=self._get_bitstream_path(),
@@ -849,7 +1007,16 @@ class Builder:
                     sysupgrade=os.path.join(generic_dir, 'lede-{}-squashfs-sysupgrade.tar'.format(platform))
                 )
 
-        self._deploy_ssh(images)
+        sd_config = 'sd_config' in targets
+        nand_config = 'nand_config' in targets
+
+        sd_config_local = 'local_sd_config' in targets
+        sd_recovery_config = 'local_sd_recovery_config' in targets
+
+        if images_ssh or sd_config or nand_config:
+            self._deploy_ssh(images_ssh, sd_config, nand_config)
+        if images_local or sd_config_local or sd_recovery_config:
+            self._deploy_local(images_local, sd_config_local, sd_recovery_config)
 
     def status(self):
         """

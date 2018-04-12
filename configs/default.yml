@@ -50,6 +50,14 @@ remote:
             uri: git@gitlab.bo:x/cgminer.git
             branch: braiins-old-spi
 
+local:
+    # list of output directories for local targets
+    sd: output/devel/sd/
+    sd_config: output/devel/sd/
+    sd_recovery: output/devel/sd_recovery/
+    sd_recovery_config: output/devel/sd_recovery/
+    nand_recovery: output/devel/nand_recovery/
+
 feeds:
     # always create feeds.conf
     create_always: no
@@ -71,11 +79,18 @@ uenv:
 deploy:
     # default target NAND or SD card
     targets:
-        - sd
+#        - sd
 #        - sd_recovery
+#        - sd_config
 #        - nand_recovery
 #        - nand_firmware1
 #        - nand_firmware2
+#        - nand_config
+        - local_sd
+        - local_sd_config
+        - local_sd_recovery
+        - local_sd_recovery_config
+        - local_nand_recovery
     # use factory or sysupgrade image for formating/updating UBI partition
     # for first load is needed factory image
     # factory image swipes rootfs_data overlay!
