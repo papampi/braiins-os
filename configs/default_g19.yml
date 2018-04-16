@@ -57,6 +57,7 @@ local:
     sd_recovery: output/devel_g19/sd_recovery/
     sd_recovery_config: output/devel_g19/sd_recovery/
     nand_recovery: output/devel_g19/nand_recovery/
+    nand_inno: output/devel_g19/nand_inno/
 
 feeds:
     # always create feeds.conf
@@ -91,6 +92,7 @@ deploy:
         - local_sd_recovery
         - local_sd_recovery_config
         - local_nand_recovery
+        - local_nand_inno
     # use factory or sysupgrade image for formating/updating UBI partition
     # for first load is needed factory image
     # factory image swipes rootfs_data overlay!

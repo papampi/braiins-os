@@ -1,4 +1,5 @@
 /.env/
 /.idea/
 /build/
+/output/
 __pycache__/

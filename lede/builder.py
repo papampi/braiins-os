@@ -4,6 +4,7 @@ import shutil
 import tarfile
 import gzip
 import git
+import io
 import os
 import sys
 
@@ -27,6 +28,14 @@ class BuilderStop(Exception):
 ImageSd = namedtuple('ImageSd', ['boot', 'uboot', 'fpga', 'kernel'])
 ImageRecovery = namedtuple('ImageRecovery', ['boot', 'uboot', 'fpga', 'kernel', 'factory'])
 ImageNand = namedtuple('ImageNand', ['boot', 'uboot', 'fpga', 'factory', 'sysupgrade'])
+ImageInno = namedtuple('ImageInno', ['boot', 'uboot', 'fpga', 'kernel', 'kernel_recovery', 'factory'])
+
+
+def get_stream_size(stream):
+    stream_pos = stream.tell()
+    stream_size = stream.seek(0, os.SEEK_END)
+    stream.seek(stream_pos)
+    return stream_size
 
 
 class Builder:
@@ -50,11 +59,24 @@ class Builder:
     MINER_MAC = 'ethaddr'
     MINER_HWID = 'miner_hwid'
     MINER_FIRMWARE = 'firmware'
+    MINER_ENV_SIZE = 0x20000
     MINER_CFG_SIZE = 0x20000
 
     UENV_TXT = 'uEnv.txt'
 
     MTD_BITSTREAM = 'fpga'
+
+    INNO_FIRMWARE_DIR = 'firmware'
+    INNO_UBOOT_ENV = 'uboot_env.bin'
+    INNO_UBOOT_ENV_CONFIG = 'uboot_env.config'
+    INNO_UBOOT_ENV_SRC = 'uboot_env.txt'
+    INNO_MINER_CFG = 'miner_cfg.bin'
+    INNO_MINER_CFG_CONFIG = 'miner_cfg.config'
+    INNO_UPGRADE_SCRIPT = 'upgrade.py'
+    INNO_SCRIPT_REQUIREMENTS = 'requirements.txt'
+    INNO_STAGE1_SCRIPT = 'stage1.sh'
+    INNO_STAGE2_SCRIPT = 'stage2.sh'
+    INNO_STAGE2 = 'stage2.tgz'
 
     def __init__(self, config, argv):
         """
@@ -156,7 +178,8 @@ class Builder:
         """
         Check if glibc is used for build
 
-        :return: True when configuration file is set for use of glibc.
+        :return:
+            True when configuration file is set for use of glibc.
         """
         config_path, _ = self._get_config_paths()
         with open(config_path, 'r') as config:
@@ -171,6 +194,20 @@ class Builder:
         """
         mac = self._config.miner.mac
         return 'miner-' + ''.join(mac.split(':')[-3:]).lower()
+
+    def _get_mkenvimage(self):
+        """
+        Return mkenvimage utility when it exists or raise an exception
+
+        :return:
+            Path to mkenvimage utility.
+        """
+        mkenvimage = os.path.join(self._working_dir,
+                                  'build_dir', 'host', 'u-boot-2014.10', 'tools', 'mkenvimage')
+        if not os.path.exists(mkenvimage):
+            logging.error("Missing utility '{}'".format(mkenvimage))
+            raise BuilderStop
+        return mkenvimage
 
     def _init_repos(self):
         """
@@ -556,7 +593,7 @@ class Builder:
             logging.info("Writing '{}' to NAND partition '{}'...".format(os.path.basename(local), mtd))
             self._mtd_write(ssh, local, mtd)
 
-    def _upload_images(self, upload_manager, image, recovery: bool=False):
+    def _upload_images(self, upload_manager, image, recovery: bool=False, compressed=()):
         """
         Upload all image files using upload manager
 
@@ -566,6 +603,8 @@ class Builder:
             Paths to firmware images.
         :param recovery:
             Transfer recovery images.
+        :param compressed:
+            List of images which should be compressed.
         """
         upload = [
             (image.boot, 'boot.bin'),
@@ -577,7 +616,10 @@ class Builder:
             upload.append((image.factory, 'factory.bin'))
 
         for local, remote in upload:
-            upload_manager.put(local, remote)
+            compress = remote in compressed
+            if compress:
+                remote += '.gz'
+            upload_manager.put(local, remote, compress)
 
     def _deploy_ssh_sd(self, ssh, sftp, image, recovery: bool):
         """
@@ -596,7 +638,7 @@ class Builder:
             def __init__(self, sftp):
                 self.sftp = sftp
 
-            def put(self, src, dst):
+            def put(self, src, dst, compress=False):
                 logging.info("Uploading '{}'...".format(dst))
                 self.sftp.put(src, dst)
 
@@ -744,11 +786,7 @@ class Builder:
         """
         # write miner configuration to miner_cfg NAND
         if self._config.deploy.write_miner_cfg == 'yes':
-            mkenvimage = os.path.join(self._working_dir,
-                                      'build_dir', 'host', 'u-boot-2014.10', 'tools', 'mkenvimage')
-            if not os.path.exists(mkenvimage):
-                logging.error("Missing utility '{}'".format(mkenvimage))
-                raise BuilderStop
+            mkenvimage = self._get_mkenvimage()
             input = '{}={}\n' \
                     '{}={}\n' \
                     ''.format(self.MINER_MAC, self._config.miner.mac,
@@ -875,6 +913,145 @@ class Builder:
             logging.info("Creating '{}' in '{}'...".format(self.UENV_TXT, target_dir))
             self._write_uenv(target_file, recovery)
 
+    @staticmethod
+    def _get_inno_file(name):
+        """
+        Return absolute path to the file from inno directory
+
+        :param name:
+            Name of file.
+        :return:
+            Path to the file from inno directory.
+        """
+        return os.path.abspath(os.path.join('inno', name))
+
+    def _create_inno_uboot_env(self):
+        """
+        Create U-Boot environment for converted Inno firmware
+
+        :return:
+            Bytes stream with U-Boot environment.
+        """
+        mkenvimage = self._get_mkenvimage()
+        uboot_env_src = self._get_inno_file(self.INNO_UBOOT_ENV_SRC)
+
+        return io.BytesIO(
+            self._run(mkenvimage, '-r', '-p', str(0), '-s', str(self.MINER_ENV_SIZE),
+                      uboot_env_src, output=True)
+        )
+
+    def _create_inno_miner_cfg(self):
+        """
+        Create empty miner configuration environment
+
+        :return:
+            Bytes stream with miner configuration environment.
+        """
+        mkenvimage = self._get_mkenvimage()
+
+        return io.BytesIO(
+            self._run(mkenvimage, '-r', '-p', str(0), '-s', str(self.MINER_CFG_SIZE), '-',
+                      input=''.encode(), output=True)
+        )
+
+    def _add2tar_compressed_file(self, tar, file_path, arcname):
+        """
+        Add to opened tar compressed file
+
+        :param tar:
+            Opened tar for writing.
+        :param file_path:
+            Path to uncompressed file.
+        :param arcname:
+            Name of file in the archive.
+        """
+        file_info = tar.gettarinfo(file_path, arcname=arcname)
+
+        with open(file_path, "rb") as image_file:
+            compressed_file = gzip.compress(image_file.read())
+            file_info.size = len(compressed_file)
+            compressed_file = io.BytesIO(compressed_file)
+
+        tar.addfile(file_info, compressed_file)
+
+    def _create_inno_stage2(self, image):
+        """
+        Create tarball with images for stage2 upgrade
+
+        :param image:
+            Paths to firmware images.
+        """
+        logging.info("Creating inno stage2 tarball...")
+
+        stage2 = io.BytesIO()
+        tar = tarfile.open(mode = "w:gz", fileobj=stage2)
+
+        # add recovery image
+        tar.add(image.kernel_recovery, arcname='fit.itb')
+
+        # add compressed system.bin and factory.bin
+        self._add2tar_compressed_file(tar, image.fpga, 'system.bit.gz')
+        self._add2tar_compressed_file(tar, image.factory, 'factory.bin.gz')
+
+        # add miner_cfg.config file
+        miner_cfg_config = self._get_inno_file(self.INNO_MINER_CFG_CONFIG)
+        tar.add(miner_cfg_config, self.INNO_MINER_CFG_CONFIG)
+
+        # add miner configuration environment compatible with U-Boot
+        miner_cfg = self._create_inno_miner_cfg()
+        miner_cfg_info = tar.gettarinfo(miner_cfg_config, arcname=self.INNO_MINER_CFG)
+        miner_cfg_info.size = get_stream_size(miner_cfg)
+        tar.addfile(miner_cfg_info, miner_cfg)
+
+        # add upgrade script
+        upgrade = self._get_inno_file(self.INNO_STAGE2_SCRIPT)
+        tar.add(upgrade, self.INNO_STAGE2_SCRIPT)
+
+        tar.close()
+        stage2.seek(0)
+        return stage2
+
+    def _deploy_local_inno(self, upload_manager, image):
+        """
+        Deploy NAND or SD card image for Inno upgrade to local file system
+
+        :param upload_manager:
+            Upload manager for images transfer.
+        :param image:
+            Paths to firmware images.
+        """
+        # copy all files for transfer to subdirectory
+        target_dir = upload_manager.target_dir
+        upload_manager.target_dir = os.path.join(target_dir, self.INNO_FIRMWARE_DIR)
+        os.makedirs(upload_manager.target_dir, exist_ok=True)
+
+        self._upload_images(upload_manager, image, compressed=('system.bit',))
+
+        # copy uboot_env.config file
+        uboot_env_config = self._get_inno_file(self.INNO_UBOOT_ENV_CONFIG)
+        upload_manager.put(uboot_env_config, self.INNO_UBOOT_ENV_CONFIG)
+
+        # create U-Boot environment
+        uboot_env = self._create_inno_uboot_env()
+        upload_manager.put(uboot_env, self.INNO_UBOOT_ENV)
+
+        # create tar with images for stage2 upgrade
+        stage2 = self._create_inno_stage2(image)
+        upload_manager.put(stage2, self.INNO_STAGE2)
+
+        # copy stage1 upgrade script
+        upgrade = self._get_inno_file(self.INNO_STAGE1_SCRIPT)
+        upload_manager.put(upgrade, self.INNO_STAGE1_SCRIPT)
+
+        # change to original target directory
+        upload_manager.target_dir = target_dir
+
+        # copy upgrade script for deployment
+        upgrade = self._get_inno_file(self.INNO_UPGRADE_SCRIPT)
+        requirements = self._get_inno_file(self.INNO_SCRIPT_REQUIREMENTS)
+        upload_manager.put(upgrade, self.INNO_UPGRADE_SCRIPT)
+        upload_manager.put(requirements, self.INNO_SCRIPT_REQUIREMENTS)
+
     def _deploy_local(self, images, sd_config: bool, sd_recovery_config: bool):
         """
         Deploy NAND or SD card image to local file system
@@ -892,13 +1069,20 @@ class Builder:
             def __init__(self, target_dir: str):
                 self.target_dir = target_dir
 
-            def put(self, src, dst):
+            def put(self, src, dst, compress=False):
                 logging.info("Copying '{}' to '{}'...".format(dst, self.target_dir))
-                shutil.copyfile(src, os.path.join(self.target_dir, dst))
+                src_path = type(src) is str
+                src_file = open(src, 'rb') if src_path else src
+                dst_open = open if not compress else gzip.open
+                with dst_open(os.path.join(self.target_dir, dst), 'wb') as dst_file:
+                    shutil.copyfileobj(src_file, dst_file)
+                if src_path:
+                    src_file.close()
 
         image_sd = images.get('sd')
         image_sd_recovery = images.get('sd_recovery')
         image_nand_recovery = images.get('nand_recovery')
+        image_nand_inno = images.get('nand_inno')
 
         if image_sd:
             target_dir = self._get_local_target_dir('sd')
@@ -914,6 +1098,9 @@ class Builder:
         if image_nand_recovery:
             target_dir = self._get_local_target_dir('nand_recovery')
             self._upload_images(UploadManager(target_dir), image_nand_recovery, recovery=True)
+        if image_nand_inno:
+            target_dir = self._get_local_target_dir('nand_inno')
+            self._deploy_local_inno(UploadManager(target_dir), image_nand_inno)
 
     def _get_recovery_image(self, platform: str, generic_dir: str, uboot_dir: str):
         """
@@ -955,7 +1142,8 @@ class Builder:
             'nand_config',
             'nand_recovery', 'local_nand_recovery',
             'nand_firmware1',
-            'nand_firmware2'
+            'nand_firmware2',
+            'local_nand_inno'
         ]
 
         images_ssh = {}
@@ -1006,6 +1194,17 @@ class Builder:
                     factory=os.path.join(generic_dir, 'lede-{}-squashfs-factory.bin'.format(platform)),
                     sysupgrade=os.path.join(generic_dir, 'lede-{}-squashfs-sysupgrade.tar'.format(platform))
                 )
+            if 'local_nand_inno' in targets:
+                uboot_dir = 'uboot-{}'.format(platform)
+                nand_inno = ImageInno(
+                    boot=os.path.join(generic_dir, uboot_dir, 'boot.bin'),
+                    uboot=os.path.join(generic_dir, uboot_dir, 'u-boot.img'),
+                    fpga=self._get_bitstream_path(),
+                    kernel=os.path.join(generic_dir, 'lede-{}-inno-squashfs-fit.itb'.format(platform)),
+                    kernel_recovery=os.path.join(generic_dir, 'lede-{}-recovery-squashfs-fit.itb'.format(platform)),
+                    factory=os.path.join(generic_dir, 'lede-{}-squashfs-factory.bin'.format(platform))
+                )
+                images_local['nand_inno'] = nand_inno
 
         sd_config = 'sd_config' in targets
         nand_config = 'nand_config' in targets
