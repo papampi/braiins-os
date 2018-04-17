@@ -4,12 +4,19 @@ set -e
 
 cd /tmp/firmware
 
+. ./info.sh
+
 ETHADDR=$(fw_printenv -n ethaddr)
 MINER_HWVER=$(fw_printenv -n hwver)
 
 UBOOT_ENV_CFG="uboot_env.config"
 
 STAGE2_FIRMWARE="stage2.tgz"
+
+if [ x${MINER_HWVER} != x${FW_MINER_HWVER} ]; then
+	echo "Unsupported miner version: ${MINER_HWVER}"
+	exit 1
+fi
 
 echo ${ETHADDR} > /dev/urandom
 echo ${MINER_HWVER} > /dev/urandom

@@ -74,6 +74,7 @@ class Builder:
     INNO_MINER_CFG_CONFIG = 'miner_cfg.config'
     INNO_UPGRADE_SCRIPT = 'upgrade.py'
     INNO_SCRIPT_REQUIREMENTS = 'requirements.txt'
+    INNO_STAGE1_INFO = 'info.sh'
     INNO_STAGE1_SCRIPT = 'stage1.sh'
     INNO_STAGE2_SCRIPT = 'stage2.sh'
     INNO_STAGE2 = 'stage2.tgz'
@@ -1011,6 +1012,24 @@ class Builder:
         stage2.seek(0)
         return stage2
 
+    def _create_inno_stage1_info(self):
+        """
+        Create script with variables for stage1 upgrade script
+
+        :return:
+            Opened stream with generated script
+        """
+        info = io.BytesIO()
+
+        hwver = {
+            'zynq-dm1-g9': 'G9',
+            'zynq-dm1-g19': 'G19'
+        }.get(self._config.miner.platform)
+        info.write('FW_MINER_HWVER={}\n'.format(hwver).encode())
+
+        info.seek(0)
+        return info
+
     def _deploy_local_inno(self, upload_manager, image):
         """
         Deploy NAND or SD card image for Inno upgrade to local file system
@@ -1038,6 +1057,10 @@ class Builder:
         # create tar with images for stage2 upgrade
         stage2 = self._create_inno_stage2(image)
         upload_manager.put(stage2, self.INNO_STAGE2)
+
+        # create env.sh with script variables
+        stage1_env = self._create_inno_stage1_info()
+        upload_manager.put(stage1_env, self.INNO_STAGE1_INFO)
 
         # copy stage1 upgrade script
         upgrade = self._get_inno_file(self.INNO_STAGE1_SCRIPT)

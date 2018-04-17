@@ -66,7 +66,7 @@ def send_stream(stream, hostname: str, port: int):
     print("Transfer done...")
     # FIXME: why sleep?
     time.sleep(1)
-    server.shutdown(0)
+    server.shutdown(socket.SHUT_WR)
     server.close()
 
 
