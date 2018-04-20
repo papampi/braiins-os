@@ -48,6 +48,15 @@ remote:
         cgminer:
             uri: git@gitlab.bo:x/cgminer.git
 
+local:
+    # list of output directories for local targets
+    sd: output/devel_g19_majo/sd/
+    sd_config: output/devel_g19_majo/sd/
+    sd_recovery: output/devel_g19_majo/sd_recovery/
+    sd_recovery_config: output/devel_g19_majo/sd_recovery/
+    nand_recovery: output/devel_g19_majo/nand_recovery/
+    nand_inno: output/devel_g19_majo/nand_inno/
+
 feeds:
     # always create feeds.conf
     create_always: no
@@ -56,12 +65,32 @@ feeds:
     # always install feeds
     install_always: no
 
+uenv:
+    # boot Linux from SD instead of NAND
+    mac: yes
+    # reset firmware to factory settings
+    factory_reset: no
+    # use for factory reset images from SD
+    sd_images: no
+    # boot Linux from SD instead of NAND
+    sd_boot: no
+
 deploy:
     # default target NAND or SD card
     targets:
-        - sd
+#        - sd
+#        - sd_recovery
+#        - sd_config
+#        - nand_recovery
 #        - nand_firmware1
 #        - nand_firmware2
+#        - nand_config
+        - local_sd
+        - local_sd_config
+        - local_sd_recovery
+        - local_sd_recovery_config
+        - local_nand_recovery
+        - local_nand_inno
     # use factory or sysupgrade image for formating/updating UBI partition
     # for first load is needed factory image
     # factory image swipes rootfs_data overlay!
