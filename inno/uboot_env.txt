@@ -1,14 +1,10 @@
 load_addr=0x2000000
-rootfs_off=0x7D00000
-rootfs_size=0xA00000
-bitstream_off=0x300000
-bitstream_size=0x100000
 bitstream_addr=0x2100000
 bootenv=uEnv.txt
 set_bootargs=setenv bootargs console=ttyPS0,115200 root=/dev/ram0 r rootfstype=squashfs ${mtdparts} earlyprintk
 uenv_load=load mmc 0 ${load_addr} ${bootenv} && echo Loaded environment from ${bootenv} && env import -t ${load_addr} ${filesize}
 load_fpga=nand read ${load_addr} ${bitstream_off} ${bitstream_size} && unzip ${load_addr} ${bitstream_addr} && fpga loadb 0 ${bitstream_addr} ${bitstream_size}
-nandboot=echo Copying FIT from NAND flash to RAM... && run uenv_load; test x${sd_boot} = xyes && run sdboot; run set_bootargs && run load_fpga && nand read ${load_addr} ${rootfs_off} ${rootfs_size} && bootm ${load_addr}
+nandboot=echo Copying FIT from NAND flash to RAM... && run uenv_load; test x${sd_boot} = xyes && run sdboot; run set_bootargs && run load_fpga && nand read ${load_addr} ${kernel_off} ${kernel_size} && bootm ${load_addr}
 sdboot=echo Copying FIT from SD to RAM... && run set_bootargs && run uenv_load; load mmc 0 ${load_addr} fit.itb && bootm ${load_addr}
 mtdids=nand0=pl35x-nand
 mtdparts=mtdparts=pl35x-nand:512k(boot),2560k(uboot),2m(fpga1),2m(fpga2),512k(uboot_env),512k(miner_cfg),22m(recovery),95m(firmware1),95m(firmware2)
