@@ -47,6 +47,9 @@ class Builder:
     The class also provides miscellaneous methods for cleaning build directories, firmware deployment and debugging
     on target platform.
     """
+    TARGET_ZYNQ_DM1_G9 = 'zynq-dm1-g9'
+    TARGET_ZYNQ_DM1_G19 = 'zynq-dm1-g19'
+
     LEDE = 'lede'
     LUCI = 'luci'
     PLATFORM = 'platform'
@@ -78,6 +81,42 @@ class Builder:
     INNO_STAGE1_SCRIPT = 'stage1.sh'
     INNO_STAGE2_SCRIPT = 'stage2.sh'
     INNO_STAGE2 = 'stage2.tgz'
+
+    def _get_external_config(self, repo_name: str, name: str):
+        """
+        Return absolute path to external directory of corespondent repository
+
+        :param repo_name:
+            Name of repository.
+        :param name:
+            Descriptive name of repository.
+        :return:
+            Absolute path to external directory.
+        """
+        external_dir = self._get_repo(repo_name).working_dir
+        logging.debug("Set external {} tree to '{}'".format(name, external_dir))
+        return external_dir
+
+    def _get_target_bitstream(self, name: str):
+        """
+        Return absolute path to bitstream for corespondent target
+
+        :param name:
+            Name of target.
+        :return:
+            Absolute path to bitstream.
+        """
+        bitstream_path = self._get_bitstream_path(platform=name)
+        logging.debug("Set bitstream target {} path to '{}'".format(name, bitstream_path))
+        return bitstream_path
+
+    GENERATED_CONFIGS = OrderedDict([
+        ('CONFIG_EXTERNAL_KERNEL_TREE', partial(_get_external_config, repo_name=LINUX, name='kernel')),
+        ('CONFIG_EXTERNAL_CGMINER_TREE', partial(_get_external_config, repo_name=CGMINER, name='CGMiner')),
+        ('CONFIG_EXTERNAL_UBOOT_TREE', partial(_get_external_config, repo_name=UBOOT, name='U-Boot')),
+        ('CONFIG_TARGET_FPGA_dm1-g9', partial(_get_target_bitstream, name=TARGET_ZYNQ_DM1_G9)),
+        ('CONFIG_TARGET_FPGA_dm1-g19', partial(_get_target_bitstream, name=TARGET_ZYNQ_DM1_G19))
+    ])
 
     def __init__(self, config, argv):
         """
@@ -327,11 +366,6 @@ class Builder:
         It also sets paths to Linux and CGMiner external directories in this configuration file.
         """
         logging.info("Preparing config...")
-        externals = (
-            ('CONFIG_EXTERNAL_KERNEL_TREE', self.LINUX, 'kernel'),
-            ('CONFIG_EXTERNAL_CGMINER_TREE', self.CGMINER, 'CGMiner'),
-            ('CONFIG_EXTERNAL_UBOOT_TREE', self.UBOOT, 'U-Boot')
-        )
 
         config_src_path, config_dst_path = self._get_config_paths()
 
@@ -350,10 +384,9 @@ class Builder:
 
             with open(config_dst_path, 'a') as config_dst:
                 # set paths to Linux and CGMiner external directories
-                for config, repo_name, name in externals:
-                    external_dir = self._get_repo(repo_name).working_dir
-                    logging.debug("Set external {} tree to '{}'".format(name, external_dir))
-                    config_dst.write('{}="{}"\n'.format(config, external_dir))
+                for config, generator in self.GENERATED_CONFIGS.items():
+                    value = generator(self)
+                    config_dst.write('{}="{}"\n'.format(config, value))
             logging.debug("Creating full configuration file")
             self._run('make', 'defconfig')
 
@@ -373,17 +406,12 @@ class Builder:
 
         logging.info("Saving changes in configuration to '{}'...".format(config_dst_path))
         with open(config_dst_path, 'w') as config_dst:
-            configs = [
-                'CONFIG_EXTERNAL_KERNEL_TREE',
-                'CONFIG_EXTERNAL_CGMINER_TREE',
-                'CONFIG_EXTERNAL_UBOOT_TREE'
-            ]
             # call ./scripts/diffconfig.sh to get configuration diff
             output = self._run(os.path.join('scripts', 'diffconfig.sh'), output=True)
             for line in output.decode('utf-8').splitlines():
                 # do not store lines with configuration of external directories
                 # this files are automatically generated
-                if not any(line.startswith(config) for config in configs):
+                if not any(line.startswith(config) for config in self.GENERATED_CONFIGS):
                     config_dst.write(line)
                     config_dst.write('\n')
 
@@ -543,19 +571,23 @@ class Builder:
         """
         return self.MTD_BITSTREAM + str(index)
 
-    def _get_bitstream_path(self) -> str:
+    def _get_bitstream_path(self, platform: str=None) -> str:
         """
         Return path to FPGA bitstream for selected platform
 
+        :param platform:
+            Name of selected platform.
+            When platform is omitted then platform from current configuration is used.
         :return:
             String with path to FPGA bitstream.
         """
         bitstream = {
-            'zynq-dm1-g9': os.path.join('g9', 'bin', 'system.bit'),
-            'zynq-dm1-g19': os.path.join('g19', 'bin', 'system.bit')
+            self.TARGET_ZYNQ_DM1_G9: os.path.join('g9', 'bin', 'system.bit'),
+            self.TARGET_ZYNQ_DM1_G19: os.path.join('g19', 'bin', 'system.bit')
         }
         platform_dir = self._get_repo(self.PLATFORM).working_dir
-        return os.path.join(platform_dir, bitstream[self._config.miner.platform])
+        platform = platform or self._config.miner.platform
+        return os.path.join(platform_dir, bitstream[platform])
 
     @staticmethod
     def _get_firmware_mtd(index) -> str:
