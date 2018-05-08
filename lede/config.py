@@ -140,7 +140,7 @@ class ConfigWrapper:
             Value of item or default value when item is not set.
         """
         value = self._root[item] if item in self._root else None
-        return value if value is not None else default
+        return ConfigWrapper(value) if value is not None else default
 
     def items(self):
         """
