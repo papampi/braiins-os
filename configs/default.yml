@@ -13,6 +13,10 @@ build:
     name: devel
     # file with default LEDE configuration
     config: defaults/devel.conf
+    # build key for signing packages and sysupgrade tarball
+    key:
+        secret: keys/test
+        public: keys/test.pub
     # always copy default configuration file
     config_always: no
     # relative or absolute path to the build directory

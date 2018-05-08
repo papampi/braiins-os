@@ -38,6 +38,25 @@ def get_stream_size(stream):
     return stream_size
 
 
+def is_target_latest(src_path: str, dst_path: str) -> bool:
+    """
+    Check if target file is up-to-date with source file
+
+    :param src_path:
+        Path to source file.
+    :param dst_path:
+        Path to destination file.
+    :return:
+        True when destination file exists and its creatin time is not older then source file.
+    """
+    if not os.path.exists(dst_path):
+        # destination file does not exists so source is newer
+        return False
+    src_time = os.path.getmtime(src_path)
+    dst_time = os.path.getmtime(dst_path)
+    return dst_time >= src_time
+
+
 class Builder:
     """
     Main class for building the Miner firmware based on the LEDE (OpenWRT) project.
@@ -59,6 +78,9 @@ class Builder:
     FEEDS_CONF_SRC = 'feeds.conf.default'
     FEEDS_CONF_DST = 'feeds.conf'
     CONFIG_NAME = '.config'
+    BUILD_KEY_NAME = 'key-build'
+    BUILD_KEY_PUB_NAME = 'key-build.pub'
+
     MINER_MAC = 'ethaddr'
     MINER_HWID = 'miner_hwid'
     MINER_FIRMWARE = 'firmware'
@@ -209,7 +231,7 @@ class Builder:
         :return:
             Pair of absolute paths to default and current configuration file.
         """
-        lede_dir = self._working_dir
+        lede_dir = self._get_repo(self.LEDE).working_dir
         config_src_path = os.path.abspath(self._config.build.config)
         config_dst_path = os.path.join(lede_dir, self.CONFIG_NAME)
         return config_src_path, config_dst_path
@@ -376,9 +398,7 @@ class Builder:
             logging.debug("Creating default configuration")
             self._run('make', 'defconfig')
 
-        config_src_time = os.path.getmtime(config_src_path)
-        config_dst_time = os.path.getmtime(config_dst_path)
-        if default_config or (config_dst_time < config_src_time) or config_copy:
+        if default_config or not is_target_latest(config_src_path, config_dst_path) or config_copy:
             logging.debug("Copy config from '{}'".format(config_src_path))
             shutil.copy(config_src_path, config_dst_path)
 
@@ -389,6 +409,35 @@ class Builder:
                     config_dst.write('{}="{}"\n'.format(config, value))
             logging.debug("Creating full configuration file")
             self._run('make', 'defconfig')
+
+    def _prepare_keys(self):
+        """
+        Prepare LEDE build keys
+
+        The keys are used for signing packages and sysupgrade tarball.
+        When configuration does not contain any key then LEDE generates new one.
+        """
+        build_key = self._config.build.get('key', None)
+
+        if not build_key:
+            # missing build key
+            return
+
+        logging.info("Preparing build key...")
+
+        lede_dir = self._get_repo(self.LEDE).working_dir
+        key1_src_path = build_key.secret
+        key2_src_path = build_key.public
+        key1_dst_path = os.path.join(lede_dir, self.BUILD_KEY_NAME)
+        key2_dst_path = os.path.join(lede_dir, self.BUILD_KEY_PUB_NAME)
+
+        if not is_target_latest(key1_src_path, key1_dst_path):
+            logging.debug("Copy secret build key from '{}'".format(key1_src_path))
+            shutil.copy(key1_src_path, key1_dst_path)
+
+        if not is_target_latest(key2_src_path, key2_dst_path):
+            logging.debug("Copy public build key from '{}'".format(key2_src_path))
+            shutil.copy(key2_src_path, key2_dst_path)
 
     def _config_lede(self):
         """
@@ -442,6 +491,7 @@ class Builder:
 
         self._prepare_feeds()
         self._prepare_config()
+        self._prepare_keys()
 
     def clean(self, purge: bool=False):
         """
