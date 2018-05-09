@@ -62,6 +62,7 @@ local:
     sd_recovery_config: output/devel/sd_recovery/
     nand_recovery: output/devel/nand_recovery/
     nand_inno: output/devel/nand_inno/
+    feeds: output/devel/feeds/
 
 feeds:
     # always create feeds.conf
@@ -97,6 +98,9 @@ deploy:
         - local_sd_recovery_config
         - local_nand_recovery
         - local_nand_inno
+        - local_feeds
+    # base file which is used for concatenation with new firmware meta information
+#    feeds_base: feeds/Packages
     # use factory or sysupgrade image for formating/updating UBI partition
     # for first load is needed factory image
     # factory image swipes rootfs_data overlay!

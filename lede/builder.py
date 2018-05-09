@@ -8,7 +8,6 @@ import io
 import os
 import sys
 
-from contextlib import contextmanager
 from collections import OrderedDict, namedtuple
 from termcolor import colored
 from functools import partial
@@ -16,6 +15,7 @@ from functools import partial
 from lede.config import RemoteWalker
 from lede.repo import RepoProgressPrinter
 from lede.ssh import SSHManager
+from lede.packages import Packages
 
 
 class BuilderStop(Exception):
@@ -29,6 +29,7 @@ ImageSd = namedtuple('ImageSd', ['boot', 'uboot', 'fpga', 'kernel'])
 ImageRecovery = namedtuple('ImageRecovery', ['boot', 'uboot', 'fpga', 'kernel', 'factory'])
 ImageNand = namedtuple('ImageNand', ['boot', 'uboot', 'fpga', 'factory', 'sysupgrade'])
 ImageInno = namedtuple('ImageInno', ['boot', 'uboot', 'fpga', 'kernel', 'kernel_recovery', 'factory'])
+ImageFeeds = namedtuple('ImageFeeds', ['key', 'packages', 'sysupgrade'])
 
 
 def get_stream_size(stream):
@@ -103,6 +104,23 @@ class Builder:
     INNO_STAGE1_SCRIPT = 'stage1.sh'
     INNO_STAGE2_SCRIPT = 'stage2.sh'
     INNO_STAGE2 = 'stage2.tgz'
+
+    # feeds index constants
+    FEEDS_INDEX = 'Packages'
+    FEEDS_ATTR_PACKAGE = 'Package'
+    FEEDS_ATTR_FILENAME = 'Filename'
+    FEEDS_EXCLUDED_ATTRIBUTES = ['Source', 'Maintainer']
+
+    FEED_FIRMWARE = 'firmware'
+
+    # list of supported utilities
+    LEDE_MKENVIMAGE = 'mkenvimage'
+    LEDE_USIGN = 'usign'
+
+    LEDE_UTILITIES = {
+        LEDE_MKENVIMAGE: os.path.join('build_dir', 'host', 'u-boot-2014.10', 'tools', 'mkenvimage'),
+        LEDE_USIGN: os.path.join('staging_dir', 'host', 'bin', 'usign')
+    }
 
     def _get_external_config(self, repo_name: str, name: str):
         """
@@ -257,19 +275,20 @@ class Builder:
         mac = self._config.miner.mac
         return 'miner-' + ''.join(mac.split(':')[-3:]).lower()
 
-    def _get_mkenvimage(self):
+    def _get_utility(self, name: str):
         """
-        Return mkenvimage utility when it exists or raise an exception
+        Return LEDE utility when it exists or raise an exception
 
+        :param name:
+            Name of LEDE utility.
         :return:
-            Path to mkenvimage utility.
+            Path to specified LEDE utility.
         """
-        mkenvimage = os.path.join(self._working_dir,
-                                  'build_dir', 'host', 'u-boot-2014.10', 'tools', 'mkenvimage')
-        if not os.path.exists(mkenvimage):
-            logging.error("Missing utility '{}'".format(mkenvimage))
+        utility_path = os.path.join(self._working_dir, self.LEDE_UTILITIES[name])
+        if not os.path.exists(utility_path):
+            logging.error("Missing utility '{}'".format(utility_path))
             raise BuilderStop
-        return mkenvimage
+        return utility_path
 
     def _init_repos(self):
         """
@@ -869,7 +888,7 @@ class Builder:
         """
         # write miner configuration to miner_cfg NAND
         if self._config.deploy.write_miner_cfg == 'yes':
-            mkenvimage = self._get_mkenvimage()
+            mkenvimage = self._get_utility(self.LEDE_MKENVIMAGE)
             input = '{}={}\n' \
                     '{}={}\n' \
                     ''.format(self.MINER_MAC, self._config.miner.mac,
@@ -1015,7 +1034,7 @@ class Builder:
         :return:
             Bytes stream with U-Boot environment.
         """
-        mkenvimage = self._get_mkenvimage()
+        mkenvimage = self._get_utility(self.LEDE_MKENVIMAGE)
         uboot_env_src = self._get_inno_file(self.INNO_UBOOT_ENV_SRC)
 
         return io.BytesIO(
@@ -1030,7 +1049,7 @@ class Builder:
         :return:
             Bytes stream with miner configuration environment.
         """
-        mkenvimage = self._get_mkenvimage()
+        mkenvimage = self._get_utility(self.LEDE_MKENVIMAGE)
 
         return io.BytesIO(
             self._run(mkenvimage, '-r', '-p', str(0), '-s', str(self.MINER_CFG_SIZE), '-',
@@ -1207,6 +1226,63 @@ class Builder:
             target_dir = self._get_local_target_dir('nand_inno')
             self._deploy_local_inno(UploadManager(target_dir), image_nand_inno)
 
+    def _deploy_feeds(self, images):
+        """
+        Deploy package feeds to local file system
+
+        :param images:
+            List of images for deployment.
+        """
+        local_feeds = images.get('local')
+        target_dir = self._get_local_target_dir('feeds')
+
+        src_feeds_index = os.path.join(local_feeds.packages, self.FEEDS_INDEX)
+        dst_feeds_index = os.path.join(target_dir, self.FEEDS_INDEX)
+
+        # find package firmware meta information
+        with Packages(src_feeds_index) as src_packages:
+            firmware_package = next((package for package in src_packages
+                                     if package[self.FEEDS_ATTR_PACKAGE] == self.FEED_FIRMWARE), None)
+        if not firmware_package:
+            logging.error("Missing firmware package in '{}'".format(src_feeds_index))
+            raise BuilderStop
+
+        # overwrite previous file
+        mode = 'w'
+
+        # prepare base feeds index
+        feeds_base = self._config.deploy.get('feeds_base', None)
+        if feeds_base:
+            # append to base file if file is not empty
+            if os.path.getsize(feeds_base) > 0:
+                shutil.copy(feeds_base, dst_feeds_index)
+                mode = 'a'
+
+        # create destination feeds index
+        with open(dst_feeds_index, mode) as dst_packages:
+            if mode == 'a':
+                # appending to previous index
+                dst_packages.write('\n')
+            for attribute, value in firmware_package.items():
+                if attribute not in self.FEEDS_EXCLUDED_ATTRIBUTES:
+                    dst_packages.write('{}: {}\n'.format(attribute, value))
+
+        # sign the created index file
+        usign = self._get_utility(self.LEDE_USIGN)
+        self._run(usign, '-S', '-m', dst_feeds_index, '-s', local_feeds.key)
+
+        # compress signed index file
+        with open(dst_feeds_index, 'rb') as file_in, gzip.open(dst_feeds_index + '.gz', 'wb') as file_out:
+            shutil.copyfileobj(file_in, file_out)
+
+        # copy firmware packages
+        firmware_ipk = firmware_package[self.FEEDS_ATTR_FILENAME]
+        src_package = os.path.join(local_feeds.packages, firmware_ipk)
+        dst_sysupgrade = os.path.join(target_dir, os.path.splitext(firmware_ipk)[0] + '.tar')
+
+        shutil.copy(src_package, target_dir)
+        shutil.copy(local_feeds.sysupgrade, dst_sysupgrade)
+
     def _get_recovery_image(self, platform: str, generic_dir: str, uboot_dir: str):
         """
         Return recovery image for SD or NAND version
@@ -1248,11 +1324,13 @@ class Builder:
             'nand_recovery', 'local_nand_recovery',
             'nand_firmware1',
             'nand_firmware2',
-            'local_nand_inno'
+            'local_nand_inno',
+            'local_feeds'
         ]
 
         images_ssh = {}
         images_local = {}
+        images_feeds = {}
 
         if targets:
             for target in targets:
@@ -1310,6 +1388,13 @@ class Builder:
                     factory=os.path.join(generic_dir, 'lede-{}-squashfs-factory.bin'.format(platform))
                 )
                 images_local['nand_inno'] = nand_inno
+            if 'local_feeds' in targets:
+                feeds = ImageFeeds(
+                    key=os.path.join(self._working_dir, self.BUILD_KEY_NAME),
+                    packages=os.path.join(self._working_dir, 'staging_dir', 'packages', platform.split('-')[0]),
+                    sysupgrade=os.path.join(generic_dir, 'lede-{}-squashfs-sysupgrade.tar'.format(platform))
+                )
+                images_feeds['local'] = feeds
 
         sd_config = 'sd_config' in targets
         nand_config = 'nand_config' in targets
@@ -1321,6 +1406,8 @@ class Builder:
             self._deploy_ssh(images_ssh, sd_config, nand_config)
         if images_local or sd_config_local or sd_recovery_config:
             self._deploy_local(images_local, sd_config_local, sd_recovery_config)
+        if images_feeds:
+            self._deploy_feeds(images_feeds)
 
     def status(self):
         """

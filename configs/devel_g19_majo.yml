@@ -13,6 +13,10 @@ build:
     name: devel_g19_majo
     # file with default LEDE configuration
     config: defaults/devel_g19_majo.conf
+    # build key for signing packages and sysupgrade tarball
+    key:
+        secret: keys/test
+        public: keys/test.pub
     # always copy default configuration file
     config_always: no
     # relative or absolute path to the build directory
@@ -56,6 +60,7 @@ local:
     sd_recovery_config: output/devel_g19_majo/sd_recovery/
     nand_recovery: output/devel_g19_majo/nand_recovery/
     nand_inno: output/devel_g19_majo/nand_inno/
+    feeds: output/devel_g19_majo/feeds/
 
 feeds:
     # always create feeds.conf
@@ -91,6 +96,9 @@ deploy:
         - local_sd_recovery_config
         - local_nand_recovery
         - local_nand_inno
+        - local_feeds
+    # base file which is used for concatenation with new firmware meta information
+#    feeds_base: feeds/Packages
     # use factory or sysupgrade image for formating/updating UBI partition
     # for first load is needed factory image
     # factory image swipes rootfs_data overlay!
