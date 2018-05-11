@@ -12,7 +12,7 @@ from collections import OrderedDict, namedtuple
 from termcolor import colored
 from functools import partial
 
-from lede.config import RemoteWalker
+from lede.config import ListWalker, RemoteWalker, load_config
 from lede.repo import RepoProgressPrinter
 from lede.ssh import SSHManager
 from lede.packages import Packages
@@ -122,10 +122,47 @@ class Builder:
         LEDE_USIGN: os.path.join('staging_dir', 'host', 'bin', 'usign')
     }
 
-    def _get_external_config(self, repo_name: str, name: str):
-        """
-        Return absolute path to external directory of corespondent repository
+    # configuration file constants
+    CONFIG_DEVICES = ['nand', 'inno', 'recovery', 'sd']
+    PACKAGE_LIST_PREFIX = 'image_'
 
+    def _write_target_config(self, stream, config):
+        """
+        Write all settings concerning target configuration
+
+        :param stream:
+            Opened stream for writing configuration.
+        :param config:
+            Configuration name prefix.
+        """
+        image_packages = load_config(self._config.build.packages)
+
+        platform = self._config.miner.platform
+        target_name = platform.split('-', 1)[0]
+        device_name = platform.replace('-', '_')
+        bitstream_path = self._get_bitstream_path()
+
+        stream.write('CONFIG_TARGET_{}=y\n'.format(target_name))
+        stream.write('CONFIG_TARGET_{}=y\n'.format(device_name))
+        stream.write('CONFIG_TARGET_MULTI_PROFILE=y\n')
+        stream.write('CONFIG_TARGET_PER_DEVICE_ROOTFS=y\n')
+
+        for image in self.CONFIG_DEVICES:
+            packages = ' '.join(ListWalker(image_packages, self.PACKAGE_LIST_PREFIX + image))
+            stream.write('CONFIG_TARGET_DEVICE_{}_DEVICE_{}=y\n'.format(device_name, image))
+            stream.write('CONFIG_TARGET_DEVICE_PACKAGES_{}_DEVICE_{}="{}"\n'.format(device_name, image, packages))
+
+        logging.debug("Set bitstream target path to '{}'".format(bitstream_path))
+        stream.write('CONFIG_TARGET_FPGA="{}"\n'.format(bitstream_path))
+
+    def _write_external_path(self, stream, config, repo_name: str, name: str):
+        """
+        Write absolute path to external directory of corespondent repository
+
+        :param stream:
+            Opened stream for writing configuration.
+        :param config:
+            Configuration name prefix.
         :param repo_name:
             Name of repository.
         :param name:
@@ -135,28 +172,16 @@ class Builder:
         """
         external_dir = self._get_repo(repo_name).working_dir
         logging.debug("Set external {} tree to '{}'".format(name, external_dir))
-        return external_dir
+        stream.write('{}="{}"\n'.format(config, external_dir))
 
-    def _get_target_bitstream(self, name: str):
-        """
-        Return absolute path to bitstream for corespondent target
-
-        :param name:
-            Name of target.
-        :return:
-            Absolute path to bitstream.
-        """
-        bitstream_path = self._get_bitstream_path(platform=name)
-        logging.debug("Set bitstream target {} path to '{}'".format(name, bitstream_path))
-        return bitstream_path
-
-    GENERATED_CONFIGS = OrderedDict([
-        ('CONFIG_EXTERNAL_KERNEL_TREE', partial(_get_external_config, repo_name=LINUX, name='kernel')),
-        ('CONFIG_EXTERNAL_CGMINER_TREE', partial(_get_external_config, repo_name=CGMINER, name='CGMiner')),
-        ('CONFIG_EXTERNAL_UBOOT_TREE', partial(_get_external_config, repo_name=UBOOT, name='U-Boot')),
-        ('CONFIG_TARGET_FPGA_dm1-g9', partial(_get_target_bitstream, name=TARGET_ZYNQ_DM1_G9)),
-        ('CONFIG_TARGET_FPGA_dm1-g19', partial(_get_target_bitstream, name=TARGET_ZYNQ_DM1_G19))
-    ])
+    GENERATED_CONFIGS = [
+        ('CONFIG_TARGET_', _write_target_config),
+        ('CONFIG_EXTERNAL_KERNEL_TREE', partial(_write_external_path, repo_name=LINUX, name='kernel')),
+        ('CONFIG_EXTERNAL_CGMINER_TREE', partial(_write_external_path, repo_name=CGMINER, name='CGMiner')),
+        ('CONFIG_EXTERNAL_UBOOT_TREE', partial(_write_external_path, repo_name=UBOOT, name='U-Boot')),
+        # remove all commented CONFIG_TARGET_
+        ('# CONFIG_TARGET_', None)
+    ]
 
     def __init__(self, config, argv):
         """
@@ -423,9 +448,8 @@ class Builder:
 
             with open(config_dst_path, 'a') as config_dst:
                 # set paths to Linux and CGMiner external directories
-                for config, generator in self.GENERATED_CONFIGS.items():
-                    value = generator(self)
-                    config_dst.write('{}="{}"\n'.format(config, value))
+                for config, generator in self.GENERATED_CONFIGS:
+                    generator and generator(self, config_dst, config)
             logging.debug("Creating full configuration file")
             self._run('make', 'defconfig')
 
@@ -479,7 +503,7 @@ class Builder:
             for line in output.decode('utf-8').splitlines():
                 # do not store lines with configuration of external directories
                 # this files are automatically generated
-                if not any(line.startswith(config) for config in self.GENERATED_CONFIGS):
+                if not any(line.startswith(config) for config, _ in self.GENERATED_CONFIGS):
                     config_dst.write(line)
                     config_dst.write('\n')
 
@@ -1301,7 +1325,7 @@ class Builder:
                     uboot=os.path.join(generic_dir, uboot_dir, 'u-boot.img'),
                     fpga=self._get_bitstream_path(),
                     kernel=os.path.join(generic_dir, 'lede-{}-recovery-squashfs-fit.itb'.format(platform)),
-                    factory=os.path.join(generic_dir, 'lede-{}-squashfs-factory.bin'.format(platform))
+                    factory=os.path.join(generic_dir, 'lede-{}-nand-squashfs-factory.bin'.format(platform))
                 )
 
     def deploy(self):
@@ -1313,8 +1337,7 @@ class Builder:
 
         logging.info("Start deploying Miner firmware...")
 
-        generic_dir = os.path.join(self._working_dir, 'bin', 'targets', 'zynq',
-                                   'generic' if not self._use_glibc() else 'generic-glibc')
+        generic_dir = os.path.join(self._working_dir, 'bin', 'targets', 'zynq')
 
         supported_targets = [
             'sd_config',
@@ -1374,8 +1397,8 @@ class Builder:
                     boot=os.path.join(generic_dir, uboot_dir, 'boot.bin'),
                     uboot=os.path.join(generic_dir, uboot_dir, 'u-boot.img'),
                     fpga=self._get_bitstream_path(),
-                    factory=os.path.join(generic_dir, 'lede-{}-squashfs-factory.bin'.format(platform)),
-                    sysupgrade=os.path.join(generic_dir, 'lede-{}-squashfs-sysupgrade.tar'.format(platform))
+                    factory=os.path.join(generic_dir, 'lede-{}-nand-squashfs-factory.bin'.format(platform)),
+                    sysupgrade=os.path.join(generic_dir, 'lede-{}-nand-squashfs-sysupgrade.tar'.format(platform))
                 )
             if 'local_nand_inno' in targets:
                 uboot_dir = 'uboot-{}'.format(platform)
@@ -1385,14 +1408,14 @@ class Builder:
                     fpga=self._get_bitstream_path(),
                     kernel=os.path.join(generic_dir, 'lede-{}-inno-squashfs-fit.itb'.format(platform)),
                     kernel_recovery=os.path.join(generic_dir, 'lede-{}-recovery-squashfs-fit.itb'.format(platform)),
-                    factory=os.path.join(generic_dir, 'lede-{}-squashfs-factory.bin'.format(platform))
+                    factory=os.path.join(generic_dir, 'lede-{}-nand-squashfs-factory.bin'.format(platform))
                 )
                 images_local['nand_inno'] = nand_inno
             if 'local_feeds' in targets:
                 feeds = ImageFeeds(
                     key=os.path.join(self._working_dir, self.BUILD_KEY_NAME),
                     packages=os.path.join(self._working_dir, 'staging_dir', 'packages', platform.split('-')[0]),
-                    sysupgrade=os.path.join(generic_dir, 'lede-{}-squashfs-sysupgrade.tar'.format(platform))
+                    sysupgrade=os.path.join(generic_dir, 'lede-{}-nand-squashfs-sysupgrade.tar'.format(platform))
                 )
                 images_feeds['local'] = feeds
 

@@ -153,6 +153,53 @@ class ConfigWrapper:
         return ((key, ConfigWrapper(value)) for key, value in pairs)
 
 
+class ListWalker:
+    """
+    Iterator class for access list with inheritance based on `YAML` configuration
+    """
+    def __init__(self, root: ConfigWrapper, list_name: str):
+        """
+        Initialize ListWalker for specified list
+
+        :param root:
+            Configuration root where selected and base lists are searched.
+        :param list_name:
+            Name of selected list.
+        """
+        self._root = root
+        self._list_name = list_name
+
+    def _get_list(self, list_name: str):
+        """
+        Generator for accessing all items from the list with inheritance
+
+        :param list_name:
+            Name of root list.
+        :return:
+            Generator object with list iterator.
+        """
+        list_node = self._root.get(list_name)
+        if not list_node:
+            raise AttributeError("Cannot find list base with the name '{}'".format(list_name))
+        base = list_node.get('base')
+        list = list_node.get('list')
+        if base:
+            for base_list in base:
+                yield from self._get_list(base_list)
+        if list:
+            for item in list:
+                yield item
+
+    def __iter__(self):
+        """
+        Return generator object as an iterator
+
+        :return:
+            Items are objects contained in the list and its predecessors.
+        """
+        yield from self._get_list(self._list_name)
+
+
 class RemoteWalker:
     """
     Iterator class for access remote repositories in configuration file
@@ -166,7 +213,7 @@ class RemoteWalker:
         :param remote:
             Attribute remote from configuration file.
         :param fetch:
-            If True then it is possible override configuration file by forcing fetch
+            If True then it is possible override configuration file by forcing fetch.
         """
         self.repos = remote.repos
         # get global settings

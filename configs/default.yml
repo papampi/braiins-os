@@ -13,6 +13,8 @@ build:
     name: devel
     # file with default LEDE configuration
     config: defaults/devel.conf
+    # file with list of packages for build images
+    packages: configs/device_packages.yml
     # build key for signing packages and sysupgrade tarball
     key:
         secret: keys/test
