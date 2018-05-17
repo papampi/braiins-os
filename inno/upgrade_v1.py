@@ -5,6 +5,7 @@ import telnetlib
 import tarfile
 import socket
 import time
+import hwid
 import sys
 import io
 
@@ -106,10 +107,16 @@ def main(args):
     tn.write_str("cd {}\n".format(SOURCE_DIR))
     tn.write_str("ll\n")
 
-    tn.write_str("/bin/sh stage1.sh\n")
+    # generate HW identifier for miner
+    hw_id = hwid.generate()
+    tn.write_str("/bin/sh stage1.sh '{}'\n".format(hw_id))
+    tn.write_str("reboot\n")
 
     tn.write_str("exit\n")
     print(tn.read_all().decode('ascii'))
+
+    print('Upgrade was successful!')
+    print('Rebooting...')
 
 
 if __name__ == "__main__":

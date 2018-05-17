@@ -1,0 +1,44 @@
+flash_eraseall() {
+	flash_erase "$1" 0 0
+}
+
+file_size() {
+	printf "0x%x" $(wc -c < "$1")
+}
+
+ETHADDR=$(fw_printenv -n ethaddr)
+MINER_HWVER="G19"
+IMAGE_FLAG=$(fw_printenv -n image_flag) # 0|1
+
+SPL_OFF=0x0
+UBOOT_OFF=0x80000
+UBOOT_ENV1_OFF=0x180000
+UBOOT_ENV2_OFF=0x1A0000
+BITSTREAM_OFF=0x300000
+
+UBOOT_MTD=0
+UBOOT_ENV_MTD=4
+
+if [ x${MINER_HWVER} != x${FW_MINER_HWVER} ]; then
+	echo "Unsupported miner version: ${MINER_HWVER}"
+	exit 1
+fi
+
+if [ x${IMAGE_FLAG} == x"0" ]; then
+	SRC_KERNEL_OFF=0x0840000
+	DST_KERNEL_OFF=0x7D00000
+	SRC_STAGE2_OFF=0x1240000
+	DST_STAGE2_OFF=0x0A00000
+	SRC_STAGE2_MTD=9
+	DST_STAGE2_MTD=8
+elif [ x${IMAGE_FLAG} == x"1" ]; then
+	SRC_KERNEL_OFF=0x0680000
+	DST_KERNEL_OFF=0x1E00000
+	SRC_STAGE2_OFF=0x1080000
+	DST_STAGE2_OFF=0x0A00000
+	SRC_STAGE2_MTD=8
+	DST_STAGE2_MTD=7
+else
+	echo "Unsupported image flag: ${IMAGE_FLAG}"
+	exit 1
+fi

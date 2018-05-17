@@ -147,6 +147,7 @@ class SSHManager:
         _, stdout, stderr = self._client.exec_command(cmd)
 
         self._check_exit_status(cmd, stdout, stderr)
+        return stdout, stderr
 
     def open_sftp(self):
         """

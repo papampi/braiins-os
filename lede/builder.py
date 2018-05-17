@@ -70,6 +70,10 @@ class Builder:
     TARGET_ZYNQ_DM1_G9 = 'zynq-dm1-g9'
     TARGET_ZYNQ_DM1_G19 = 'zynq-dm1-g19'
 
+    LEDE_META_DIR = 'lede'
+    LEDE_META_SSH = 'ssh.py'
+    LEDE_META_HWID = 'hwid.py'
+
     LEDE = 'lede'
     LUCI = 'luci'
     PLATFORM = 'platform'
@@ -92,15 +96,20 @@ class Builder:
 
     MTD_BITSTREAM = 'fpga'
 
+    INNO_VERSIONS=2
+    INNO_DIR = 'inno'
     INNO_FIRMWARE_DIR = 'firmware'
     INNO_UBOOT_ENV = 'uboot_env.bin'
     INNO_UBOOT_ENV_CONFIG = 'uboot_env.config'
     INNO_UBOOT_ENV_SRC = 'uboot_env.txt'
     INNO_MINER_CFG = 'miner_cfg.bin'
     INNO_MINER_CFG_CONFIG = 'miner_cfg.config'
+    INNO_UPGRADE_SCRIPT_SRC = 'upgrade_v{version}.py'
     INNO_UPGRADE_SCRIPT = 'upgrade.py'
+    INNO_SCRIPT_REQUIREMENTS_SRC = 'requirements_v{version}.txt'
     INNO_SCRIPT_REQUIREMENTS = 'requirements.txt'
-    INNO_STAGE1_INFO = 'info.sh'
+    INNO_STAGE1_CONTROL_SRC = 'CONTROL_v{version}'
+    INNO_STAGE1_CONTROL = 'CONTROL'
     INNO_STAGE1_SCRIPT = 'stage1.sh'
     INNO_STAGE2_SCRIPT = 'stage2.sh'
     INNO_STAGE2 = 'stage2.tgz'
@@ -1040,16 +1049,16 @@ class Builder:
             self._write_uenv(target_file, recovery)
 
     @staticmethod
-    def _get_inno_file(name):
+    def _get_project_file(*path):
         """
-        Return absolute path to the file from inno directory
+        Return absolute path to the file from project directory
 
         :param name:
-            Name of file.
+            Relative path to the file.
         :return:
-            Path to the file from inno directory.
+            Path to the file from project directory.
         """
-        return os.path.abspath(os.path.join('inno', name))
+        return os.path.abspath(os.path.join(*path))
 
     def _create_inno_uboot_env(self):
         """
@@ -1059,7 +1068,7 @@ class Builder:
             Bytes stream with U-Boot environment.
         """
         mkenvimage = self._get_utility(self.LEDE_MKENVIMAGE)
-        uboot_env_src = self._get_inno_file(self.INNO_UBOOT_ENV_SRC)
+        uboot_env_src = self._get_project_file(self.INNO_DIR, self.INNO_UBOOT_ENV_SRC)
 
         return io.BytesIO(
             self._run(mkenvimage, '-r', '-p', str(0), '-s', str(self.MINER_ENV_SIZE),
@@ -1120,7 +1129,7 @@ class Builder:
         self._add2tar_compressed_file(tar, image.factory, 'factory.bin.gz')
 
         # add miner_cfg.config file
-        miner_cfg_config = self._get_inno_file(self.INNO_MINER_CFG_CONFIG)
+        miner_cfg_config = self._get_project_file(self.INNO_DIR, self.INNO_MINER_CFG_CONFIG)
         tar.add(miner_cfg_config, self.INNO_MINER_CFG_CONFIG)
 
         # add miner configuration environment compatible with U-Boot
@@ -1130,35 +1139,43 @@ class Builder:
         tar.addfile(miner_cfg_info, miner_cfg)
 
         # add upgrade script
-        upgrade = self._get_inno_file(self.INNO_STAGE2_SCRIPT)
+        upgrade = self._get_project_file(self.INNO_DIR, self.INNO_STAGE2_SCRIPT)
         tar.add(upgrade, self.INNO_STAGE2_SCRIPT)
 
         tar.close()
         stage2.seek(0)
         return stage2
 
-    def _create_inno_stage1_info(self):
+    def _create_inno_stage1_control(self, version: int):
         """
         Create script with variables for stage1 upgrade script
 
+        :param version:
+            Version of target firmware.
         :return:
-            Opened stream with generated script
+            Opened stream with generated script.
         """
+        control_path = self._get_project_file(self.INNO_DIR, self.INNO_STAGE1_CONTROL_SRC.format(version=version))
         info = io.BytesIO()
 
         hwver = {
             'zynq-dm1-g9': 'G9',
             'zynq-dm1-g19': 'G19'
         }.get(self._config.miner.platform)
-        info.write('FW_MINER_HWVER={}\n'.format(hwver).encode())
+        info.write('FW_MINER_HWVER={}\n\n'.format(hwver).encode())
+
+        with open(control_path, 'rb') as control_file:
+            shutil.copyfileobj(control_file, info)
 
         info.seek(0)
         return info
 
-    def _deploy_local_inno(self, upload_manager, image):
+    def _deploy_local_inno(self, upload_manager, image, version: int):
         """
         Deploy NAND or SD card image for Inno upgrade to local file system
 
+        :param version:
+            Version of target firmware.
         :param upload_manager:
             Upload manager for images transfer.
         :param image:
@@ -1172,7 +1189,7 @@ class Builder:
         self._upload_images(upload_manager, image, compressed=('system.bit',))
 
         # copy uboot_env.config file
-        uboot_env_config = self._get_inno_file(self.INNO_UBOOT_ENV_CONFIG)
+        uboot_env_config = self._get_project_file(self.INNO_DIR, self.INNO_UBOOT_ENV_CONFIG)
         upload_manager.put(uboot_env_config, self.INNO_UBOOT_ENV_CONFIG)
 
         # create U-Boot environment
@@ -1184,19 +1201,24 @@ class Builder:
         upload_manager.put(stage2, self.INNO_STAGE2)
 
         # create env.sh with script variables
-        stage1_env = self._create_inno_stage1_info()
-        upload_manager.put(stage1_env, self.INNO_STAGE1_INFO)
+        stage1_env = self._create_inno_stage1_control(version)
+        upload_manager.put(stage1_env, self.INNO_STAGE1_CONTROL)
 
         # copy stage1 upgrade script
-        upgrade = self._get_inno_file(self.INNO_STAGE1_SCRIPT)
+        upgrade = self._get_project_file(self.INNO_DIR, self.INNO_STAGE1_SCRIPT)
         upload_manager.put(upgrade, self.INNO_STAGE1_SCRIPT)
 
         # change to original target directory
         upload_manager.target_dir = target_dir
 
         # copy upgrade script for deployment
-        upgrade = self._get_inno_file(self.INNO_UPGRADE_SCRIPT)
-        requirements = self._get_inno_file(self.INNO_SCRIPT_REQUIREMENTS)
+        if version == 2:
+            ssh = self._get_project_file(self.LEDE_META_DIR, self.LEDE_META_SSH)
+            upload_manager.put(ssh, self.LEDE_META_SSH)
+        ssh = self._get_project_file(self.LEDE_META_DIR, self.LEDE_META_HWID)
+        upload_manager.put(ssh, self.LEDE_META_HWID)
+        upgrade = self._get_project_file(self.INNO_DIR, self.INNO_UPGRADE_SCRIPT_SRC.format(version=version))
+        requirements = self._get_project_file(self.INNO_DIR, self.INNO_SCRIPT_REQUIREMENTS_SRC.format(version=version))
         upload_manager.put(upgrade, self.INNO_UPGRADE_SCRIPT)
         upload_manager.put(requirements, self.INNO_SCRIPT_REQUIREMENTS)
 
@@ -1230,7 +1252,6 @@ class Builder:
         image_sd = images.get('sd')
         image_sd_recovery = images.get('sd_recovery')
         image_nand_recovery = images.get('nand_recovery')
-        image_nand_inno = images.get('nand_inno')
 
         if image_sd:
             target_dir = self._get_local_target_dir('sd')
@@ -1246,9 +1267,14 @@ class Builder:
         if image_nand_recovery:
             target_dir = self._get_local_target_dir('nand_recovery')
             self._upload_images(UploadManager(target_dir), image_nand_recovery, recovery=True)
-        if image_nand_inno:
-            target_dir = self._get_local_target_dir('nand_inno')
-            self._deploy_local_inno(UploadManager(target_dir), image_nand_inno)
+
+        # special local target for upgrading original firmware of specific version
+        for version in range(1, self.INNO_VERSIONS + 1):
+            target_name = 'nand_inno_v{}'.format(version)
+            image_nand_inno = images.get(target_name)
+            if image_nand_inno:
+                target_dir = self._get_local_target_dir(target_name)
+                self._deploy_local_inno(UploadManager(target_dir), image_nand_inno, version)
 
     def _deploy_feeds(self, images):
         """
@@ -1347,9 +1373,11 @@ class Builder:
             'nand_recovery', 'local_nand_recovery',
             'nand_firmware1',
             'nand_firmware2',
-            'local_nand_inno',
             'local_feeds'
         ]
+
+        nand_inno_versions = list('local_nand_inno_v{}'.format(version) for version in range(1, self.INNO_VERSIONS + 1))
+        supported_targets.extend(nand_inno_versions)
 
         images_ssh = {}
         images_local = {}
@@ -1400,7 +1428,7 @@ class Builder:
                     factory=os.path.join(generic_dir, 'lede-{}-nand-squashfs-factory.bin'.format(platform)),
                     sysupgrade=os.path.join(generic_dir, 'lede-{}-nand-squashfs-sysupgrade.tar'.format(platform))
                 )
-            if 'local_nand_inno' in targets:
+            if any(target in targets for target in nand_inno_versions):
                 uboot_dir = 'uboot-{}'.format(platform)
                 nand_inno = ImageInno(
                     boot=os.path.join(generic_dir, uboot_dir, 'boot.bin'),
@@ -1410,7 +1438,8 @@ class Builder:
                     kernel_recovery=os.path.join(generic_dir, 'lede-{}-recovery-squashfs-fit.itb'.format(platform)),
                     factory=os.path.join(generic_dir, 'lede-{}-nand-squashfs-factory.bin'.format(platform))
                 )
-                images_local['nand_inno'] = nand_inno
+                for target in (target for target in nand_inno_versions if target in targets):
+                    images_local['nand_inno_v{}'.format(target.split('_v')[1])] = nand_inno
             if 'local_feeds' in targets:
                 feeds = ImageFeeds(
                     key=os.path.join(self._working_dir, self.BUILD_KEY_NAME),

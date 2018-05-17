@@ -1,19 +1,13 @@
 #!/bin/sh
 
+if [ "$#" -ne 1 ]; then
+    echo "Illegal number of parameters"
+    exit 1
+fi
+
 set -e
 
-file_size() {
-	printf "0x%x" $(stat -c "%s" "$1")
-}
-
-cd /tmp/firmware
-
-. ./info.sh
-
-ETHADDR=$(fw_printenv -n ethaddr)
-MINER_HWVER=$(fw_printenv -n hwver)
-ROOTFS_FLAG=$(fw_printenv -n rootfs_flag) # a|b
-
+MINER_HWID="$1"
 UBOOT_ENV_CFG="uboot_env.config"
 
 SPL_IMAGE="boot.bin"
@@ -23,42 +17,26 @@ BITSTREAM_DATA="system.bit.gz"
 KERNEL_IMAGE="fit.itb"
 STAGE2_FIRMWARE="stage2.tgz"
 
-SPL_OFF=0x0
-UBOOT_OFF=0x80000
-UBOOT_ENV1_OFF=0x200000
-UBOOT_ENV2_OFF=0x220000
-BITSTREAM_OFF=0x300000
+function sed_variables() {
+    local value
+    local args
+    local input="$1"
+    shift
 
-UBOOT_MTD=0
-UBOOT_ENV_MTD=3
+    for name in "$@"; do
+        eval value=\$$name
+        args="$args -e 's,\${$name},$value,g'"
+    done
+    eval sed -i $args "$input"
+}
 
-if [ x${MINER_HWVER} != x${FW_MINER_HWVER} ]; then
-	echo "Unsupported miner version: ${MINER_HWVER}"
-	exit 1
-fi
+cd /tmp/firmware
 
-if [ x${ROOTFS_FLAG} == x"a" ]; then
-	SRC_KERNEL_OFF=0x0500000
-	DST_KERNEL_OFF=0x7D00000
-	SRC_STAGE2_OFF=0x0F00000
-	DST_STAGE2_OFF=0x0A00000
-	SRC_STAGE2_MTD=6
-	DST_STAGE2_MTD=8
-elif [ x${ROOTFS_FLAG} == x"b" ]; then
-	SRC_KERNEL_OFF=0x1400000
-	DST_KERNEL_OFF=0x1E00000
-	SRC_STAGE2_OFF=0x1E00000
-	DST_STAGE2_OFF=0x0A00000
-	SRC_STAGE2_MTD=4
-	DST_STAGE2_MTD=7
-else
-	echo "Unsupported rootfs flag: ${ROOTFS_FLAG}"
-	exit 1
-fi
+# include firmware specific code
+. ./CONTROL
 
-echo ${ETHADDR} > /dev/urandom
-echo ${MINER_HWVER} > /dev/urandom
-MINER_HWID=$(dd if=/dev/urandom bs=1 count=12 2>/dev/null | base64)
+# prepare configuration file
+sed_variables "$UBOOT_ENV_CFG" UBOOT_ENV_MTD UBOOT_ENV1_OFF UBOOT_ENV2_OFF
 
 flash_eraseall /dev/mtd${UBOOT_MTD}
 
@@ -105,4 +83,3 @@ echo "Content of U-Boot configuration:"
 fw_printenv -c "$UBOOT_ENV_CFG"
 
 sync
-reboot
