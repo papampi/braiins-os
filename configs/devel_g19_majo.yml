@@ -7,6 +7,12 @@ miner:
     hwid: cKWVxvQgCzs1q5fA
     # select NAND firmware which is used for boot
     firmware: 1
+    # default miner pool
+    pool:
+        host: stratum+tcp://dbg.stratum.slushpool.com
+        port: 3336
+        user: braiinstest.worker1
+#        pass: x
 
 build:
     # name of subdirectory in the build directory
@@ -61,7 +67,8 @@ local:
     sd_recovery: output/devel_g19_majo/sd_recovery/
     sd_recovery_config: output/devel_g19_majo/sd_recovery/
     nand_recovery: output/devel_g19_majo/nand_recovery/
-    nand_inno: output/devel_g19_majo/nand_inno/
+    nand_inno_v1: output/devel_g19_majo/nand_inno_v1/
+    nand_inno_v2: output/devel_g19_majo/nand_inno_v2/
     feeds: output/devel_g19_majo/feeds/
 
 feeds:
@@ -97,7 +104,8 @@ deploy:
         - local_sd_recovery
         - local_sd_recovery_config
         - local_nand_recovery
-        - local_nand_inno
+        - local_nand_inno_v1
+        - local_nand_inno_v2
         - local_feeds
     # base file which is used for concatenation with new firmware meta information
 #    feeds_base: feeds/Packages

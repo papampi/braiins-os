@@ -7,6 +7,7 @@ import git
 import io
 import os
 import sys
+import lede.hwid as hwid
 
 from collections import OrderedDict, namedtuple
 from termcolor import colored
@@ -86,8 +87,23 @@ class Builder:
     BUILD_KEY_NAME = 'key-build'
     BUILD_KEY_PUB_NAME = 'key-build.pub'
 
+    # variables for miner NAND configuration
     MINER_MAC = 'ethaddr'
     MINER_HWID = 'miner_hwid'
+    MINER_POOL_HOST = 'miner_pool_host'
+    MINER_POOL_PORT = 'miner_pool_port'
+    MINER_POOL_USER = 'miner_pool_user'
+    MINER_POOL_PASS = 'miner_pool_pass'
+
+    MINER_CFG_INPUT = [
+        (MINER_MAC, 'miner.mac', None),
+        (MINER_HWID, 'miner.hwid', hwid.generate),
+        (MINER_POOL_HOST, 'miner.pool.host', None),
+        (MINER_POOL_PORT, 'miner.pool.port', None),
+        (MINER_POOL_USER, 'miner.pool.user', None),
+        (MINER_POOL_PASS, 'miner.pool.pass', '')
+    ]
+
     MINER_FIRMWARE = 'firmware'
     MINER_ENV_SIZE = 0x20000
     MINER_CFG_SIZE = 0x20000
@@ -706,10 +722,34 @@ class Builder:
     def _get_hw_version(self) -> str:
         """
         Return hardware version for selected platform
+
         :return:
             String with hardware version.
         """
         return '-'.join(self._config.miner.platform.split('-')[1:])
+
+    def _write_miner_cfg_input(self, stream, excluded=set()):
+        """
+        Write to the stream miner configuration input for NAND
+
+        :stream:
+            Opened stream for writing miner configuration input.
+        :excluded:
+            Dictionary with excluded attributes.
+        """
+        for name, path, default in self.MINER_CFG_INPUT:
+            if name in excluded:
+                continue
+            value = self._config.get(path)
+            if value is None:
+                if default is None:
+                    logging.error("Missing miner configuration for '{}' in '{}'".format(name, path))
+                    raise BuilderStop
+                # use default value when configuration is not set in YAML
+                value = default if type(default) is str else default()
+            if value:
+                # attributes with empty value are completely omitted
+                stream.write('{}={}\n'.format(name, value).encode())
 
     def _write_nand_uboot(self, ssh, image):
         """
@@ -921,13 +961,12 @@ class Builder:
         """
         # write miner configuration to miner_cfg NAND
         if self._config.deploy.write_miner_cfg == 'yes':
+            miner_cfg_input = io.BytesIO()
+            self._write_miner_cfg_input(miner_cfg_input)
+            # generate image file with NAND configuration
             mkenvimage = self._get_utility(self.LEDE_MKENVIMAGE)
-            input = '{}={}\n' \
-                    '{}={}\n' \
-                    ''.format(self.MINER_MAC, self._config.miner.mac,
-                              self.MINER_HWID, self._config.miner.hwid)
             output = self._run(mkenvimage, '-r', '-p', str(0), '-s', str(self.MINER_CFG_SIZE), '-',
-                               input=input.encode(), output=True)
+                               input=miner_cfg_input.getvalue(), output=True)
             logging.info("Writing miner configuration to NAND partition 'miner_cfg'...")
             with ssh.pipe('mtd', 'write', '-', 'miner_cfg') as remote:
                 remote.stdin.write(output)
@@ -1060,6 +1099,18 @@ class Builder:
         """
         return os.path.abspath(os.path.join(*path))
 
+    def _create_inno_miner_cfg_input(self):
+        """
+        Create input source for mkenvimage with miner configuration
+        The configuration does not include MAC and HWID information.
+
+        :return:
+            Bytes stream with miner configuration.
+        """
+        miner_cfg_input = io.BytesIO()
+        self._write_miner_cfg_input(miner_cfg_input, {self.MINER_MAC, self.MINER_HWID})
+        return miner_cfg_input
+
     def _create_inno_uboot_env(self):
         """
         Create U-Boot environment for converted Inno firmware
@@ -1068,11 +1119,16 @@ class Builder:
             Bytes stream with U-Boot environment.
         """
         mkenvimage = self._get_utility(self.LEDE_MKENVIMAGE)
-        uboot_env_src = self._get_project_file(self.INNO_DIR, self.INNO_UBOOT_ENV_SRC)
+        uboot_env_base_input = self._get_project_file(self.INNO_DIR, self.INNO_UBOOT_ENV_SRC)
+        uboot_env_input = self._create_inno_miner_cfg_input()
+
+        # merge miner configuration with default U-Boot env
+        with open(uboot_env_base_input, 'rb') as base_input_file:
+            shutil.copyfileobj(base_input_file, uboot_env_input)
 
         return io.BytesIO(
-            self._run(mkenvimage, '-r', '-p', str(0), '-s', str(self.MINER_ENV_SIZE),
-                      uboot_env_src, output=True)
+            self._run(mkenvimage, '-r', '-p', str(0), '-s', str(self.MINER_ENV_SIZE), '-',
+                      input=uboot_env_input.getvalue(), output=True)
         )
 
     def _create_inno_miner_cfg(self):
@@ -1083,10 +1139,11 @@ class Builder:
             Bytes stream with miner configuration environment.
         """
         mkenvimage = self._get_utility(self.LEDE_MKENVIMAGE)
+        miner_cfg_input = self._create_inno_miner_cfg_input()
 
         return io.BytesIO(
             self._run(mkenvimage, '-r', '-p', str(0), '-s', str(self.MINER_CFG_SIZE), '-',
-                      input=''.encode(), output=True)
+                      input=miner_cfg_input.getvalue(), output=True)
         )
 
     def _add2tar_compressed_file(self, tar, file_path, arcname):

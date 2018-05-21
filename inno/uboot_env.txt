@@ -9,4 +9,3 @@ sdboot=echo Copying FIT from SD to RAM... && run set_bootargs && run uenv_load; 
 mtdids=nand0=pl35x-nand
 mtdparts=mtdparts=pl35x-nand:512k(boot),2560k(uboot),2m(fpga1),2m(fpga2),512k(uboot_env),512k(miner_cfg),22m(recovery),95m(firmware1),95m(firmware2)
 bootcmd=run $modeboot
-ethaddr=50:6C:BE:08:52:E1

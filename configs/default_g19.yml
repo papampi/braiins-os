@@ -3,10 +3,16 @@ miner:
     platform: zynq-dm1-g19
     # default miner MAC address
     mac: 00:0A:35:FF:FF:FF
-    # miner HW identifier (dd if=/dev/random bs=1 count=12 2>/dev/null | base64)
+    # miner HW identifier
     hwid: Q50QDhdWuWq9yDr5
     # select NAND firmware which is used for boot
     firmware: 1
+    # default miner pool
+    pool:
+        host: stratum+tcp://dbg.stratum.slushpool.com
+        port: 3336
+        user: braiinstest.worker1
+#        pass: x
 
 build:
     # name of subdirectory in the build directory

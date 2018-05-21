@@ -128,7 +128,7 @@ class ConfigWrapper:
         """
         return item in self._root
 
-    def get(self, item, default=None):
+    def get_item(self, item, default=None):
         """
         Return value of item or default value when item is not set
 
@@ -141,6 +141,24 @@ class ConfigWrapper:
         """
         value = self._root[item] if item in self._root else None
         return ConfigWrapper(value) if value is not None else default
+
+    def get(self, path, default=None):
+        """
+        Return value of item or default value when item is not set
+
+        :param path:
+            Path to the attribute specified by attributes separated by dot.
+        :param default:
+            Default value used when no value is set for specified item.
+        :return:
+            Value of item or default value when item is not set.
+        """
+        current = self
+        for item in path.split('.'):
+            current = current.get_item(item, default=default)
+            if current is None:
+                break
+        return current
 
     def items(self):
         """
