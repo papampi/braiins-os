@@ -1,16 +1,16 @@
 miner:
     # possible platforms are zynq-dm1-g9, zynq-dm1-g19
-    platform: zynq-dm1-g9
+    platform: zynq-dm1-g19
     # default miner MAC address
     mac: 00:0A:35:FF:FF:FF
     # miner HW identifier
-    hwid: Q50QDhdWuWq9yDr5
+#    hwid: Q50QDhdWuWq9yDr5
     # select NAND firmware which is used for boot
     firmware: 1
     # default miner pool
     pool:
-        host: stratum+tcp://dbg.stratum.slushpool.com
-        port: 3336
+        host: stratum+tcp://stratum.slushpool.com
+        port: 3333
         user: braiinstest.worker1
 #        pass: x
 
@@ -26,7 +26,7 @@ build:
         secret: keys/test
         public: keys/test.pub
     # always copy default configuration file
-    config_always: no
+    config_always: yes
     # relative or absolute path to the build directory
     dir: build
     # specifies the number of jobs to run simultaneously
@@ -40,7 +40,7 @@ build:
 
 remote:
     # default branch for repositories
-    branch: braiins
+    branch: master
     # always fetch latest source code
     fetch: no
 
@@ -51,16 +51,13 @@ remote:
         luci:
             uri: git@gitlab.bo:x/luci.git
         platform:
-            uri: git@gitlab.bo:x/zynq_platform.git
-            branch: master
+            uri: git@gitlab.bo:x/zynq-io-bin.git
         u-boot:
             uri: git@gitlab.bo:x/u-boot-xlnx.git
-            branch: braiins-lede
         linux:
             uri: git@gitlab.bo:x/linux-xlnx.git
         cgminer:
             uri: git@gitlab.bo:x/cgminer.git
-            branch: braiins-old-spi
 
 local:
     # list of output directories for local targets

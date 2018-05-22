@@ -151,6 +151,19 @@ class Builder:
     CONFIG_DEVICES = ['nand', 'inno', 'recovery', 'sd']
     PACKAGE_LIST_PREFIX = 'image_'
 
+    def _split_platform(self, platform: str=None):
+        """
+        Return target and sub-target for selected platform
+
+        :param platform:
+            Name of selected platform.
+            When platform is omitted then platform from current configuration is used.
+        :return:
+            Pair of two strings with platform target and sub-target.
+        """
+        platform = platform or self._config.miner.platform
+        return tuple(platform.split('-', 1))
+
     def _write_target_config(self, stream, config):
         """
         Write all settings concerning target configuration
@@ -163,7 +176,7 @@ class Builder:
         image_packages = load_config(self._config.build.packages)
 
         platform = self._config.miner.platform
-        target_name = platform.split('-', 1)[0]
+        target_name, _ = self._split_platform(platform)
         device_name = platform.replace('-', '_')
         bitstream_path = self._get_bitstream_path()
 
@@ -699,13 +712,9 @@ class Builder:
         :return:
             String with path to FPGA bitstream.
         """
-        bitstream = {
-            self.TARGET_ZYNQ_DM1_G9: os.path.join('g9', 'bin', 'system.bit'),
-            self.TARGET_ZYNQ_DM1_G19: os.path.join('g19', 'bin', 'system.bit')
-        }
         platform_dir = self._get_repo(self.PLATFORM).working_dir
-        platform = platform or self._config.miner.platform
-        return os.path.join(platform_dir, bitstream[platform])
+        platform_subtarget = self._split_platform()[1]
+        return os.path.join(platform_dir, platform_subtarget, 'system.bit')
 
     @staticmethod
     def _get_firmware_mtd(index) -> str:
@@ -718,15 +727,6 @@ class Builder:
             String with path to MTD device.
         """
         return '/dev/mtd' + {1: '7', 2: '8'}.get(index)
-
-    def _get_hw_version(self) -> str:
-        """
-        Return hardware version for selected platform
-
-        :return:
-            String with hardware version.
-        """
-        return '-'.join(self._config.miner.platform.split('-')[1:])
 
     def _write_miner_cfg_input(self, stream, excluded=set()):
         """
@@ -1416,6 +1416,7 @@ class Builder:
         Deploy Miner firmware to target platform
         """
         platform = self._config.miner.platform
+        platform_target, _ = self._split_platform(platform)
         targets = self._config.deploy.get('targets', None)
 
         logging.info("Start deploying Miner firmware...")
@@ -1500,7 +1501,7 @@ class Builder:
             if 'local_feeds' in targets:
                 feeds = ImageFeeds(
                     key=os.path.join(self._working_dir, self.BUILD_KEY_NAME),
-                    packages=os.path.join(self._working_dir, 'staging_dir', 'packages', platform.split('-')[0]),
+                    packages=os.path.join(self._working_dir, 'staging_dir', 'packages', platform_target),
                     sysupgrade=os.path.join(generic_dir, 'lede-{}-nand-squashfs-sysupgrade.tar'.format(platform))
                 )
                 images_feeds['local'] = feeds
