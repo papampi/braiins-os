@@ -1,3 +1,5 @@
+import copy
+
 from collections import namedtuple
 from ruamel import yaml
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
@@ -10,7 +12,7 @@ class ConfigWrapper:
     """
     Class to simplify access to `YAML` configuration object
     """
-    def __new__(cls, root, path=''):
+    def __new__(cls, root, path='', formatter=None):
         """
         Create ConfigWrapper object or return original `root` object
 
@@ -18,16 +20,20 @@ class ConfigWrapper:
             `YAML` root list or dictionary.
         :param path:
             Current path to this root attribute.
+        :param formatter:
+            Callable object which is called to format string value where '{' is found.
         :return:
             If root is not `YAML` dictionary or list then return its original value otherwise return root wrapped in
             `ConfigWraper`.
         """
         if type(root) not in (YAML_DICT_TYPE, YAML_LIST_TYPE):
+            if formatter and type(root) is str and '{' in root:
+                root = formatter(root)
             return root
         else:
             return super().__new__(cls)
 
-    def __init__(self, root, path=''):
+    def __init__(self, root, path='', formatter=None):
         """
         Initialize ConfigWrapper object
 
@@ -35,9 +41,23 @@ class ConfigWrapper:
             `YAML` root list or dictionary.
         :param path:
             Current path to this root attribute.
+        :param formatter:
+            Callable object which is called to format string value where '{' is found.
         """
         self._root = root
         self.path = path
+        self.formatter = formatter
+
+    def __deepcopy__(self, memo):
+        """
+        Create deep copy of config wrapper
+        """
+        cls = self.__class__
+        result = cls.__new__(cls, root=self._root)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, copy.deepcopy(v, memo))
+        return result
 
     def _is_dict(self) -> bool:
         """
@@ -80,7 +100,7 @@ class ConfigWrapper:
         if self._is_dict():
             result = self._root.get(item)
             if result is not None:
-                return ConfigWrapper(result, self._join_attribute(item))
+                return ConfigWrapper(result, path=self._join_attribute(item), formatter=self.formatter)
         raise AttributeError("Configuration '{}' has no attribute '{}'".format(self.path, item))
 
     def __getitem__(self, item):
@@ -106,16 +126,16 @@ class ConfigWrapper:
             path = '{}[{}]'.format(self.path, item)
         else:
             raise IndexError("Configuration '{}' index out of range".format(self.path))
-        return ConfigWrapper(result, path)
+        return ConfigWrapper(result, path=path, formatter=self.formatter)
 
     def __iter__(self):
         """
-        Return generator object for as an iterator
+        Return generator object as an iterator
 
         :return:
             Items are objects ConfigWrapper or basic types when value is not `YAML` dictionary or list.
         """
-        return (ConfigWrapper(value) for value in self._root)
+        return (ConfigWrapper(value, formatter=self.formatter) for value in self._root)
 
     def __contains__(self, item):
         """
@@ -140,7 +160,7 @@ class ConfigWrapper:
             Value of item or default value when item is not set.
         """
         value = self._root[item] if item in self._root else None
-        return ConfigWrapper(value) if value is not None else default
+        return ConfigWrapper(value, formatter=self.formatter) if value is not None else default
 
     def get(self, path, default=None):
         """
@@ -168,7 +188,7 @@ class ConfigWrapper:
             Items are pairs where is contain key and value.
         """
         pairs = self._root.items() if self._is_dict() else enumerate(self._root)
-        return ((key, ConfigWrapper(value)) for key, value in pairs)
+        return ((key, ConfigWrapper(value, formatter=self.formatter)) for key, value in pairs)
 
 
 class ListWalker:

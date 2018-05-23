@@ -2,6 +2,7 @@ import logging
 import subprocess
 import shutil
 import tarfile
+import copy
 import gzip
 import git
 import io
@@ -231,9 +232,45 @@ class Builder:
         :param argv:
             Command line arguments for better help printing.
         """
-        self._config = config
+        class StrFormatter:
+            """
+            Formatter class for expanding configuration string attributes
+
+            The string attribute can contain standard format tags '{NAME}' with the NAME from following list:
+            * platform - the whole platform name in format <target>-<subtarget>
+            * target - the name of target platform e.g. zynq
+            * subtarget - the name of device e.g. dm1-g9, dm1-g19
+            """
+            def __init__(self, builder: Builder):
+                """
+                Initialize formatter object
+
+                :param builder:
+                    The builder object for expanding tags for current configuration.
+                """
+                platform = config.miner.platform
+                split_platform = builder._split_platform(platform)
+                self._format_tags = {
+                    'platform': platform,
+                    'target': split_platform[0],
+                    'subtarget': split_platform[1]
+                }
+
+            def __call__(self, value: str) -> str:
+                """
+                Create callable object used in configuration parset for tag expansion
+
+                :param value:
+                    Format string with tags specified in format {NAME}.
+                :return:
+                    String with expanded tags.
+                """
+                return value.format(**self._format_tags)
+
+        self._config = copy.deepcopy(config)
+        self._config.formatter = StrFormatter(self)
         self._argv = argv
-        self._build_dir = os.path.join(os.path.abspath(config.build.dir), config.build.name)
+        self._build_dir = os.path.join(os.path.abspath(self._config.build.dir), self._config.build.name)
         self._working_dir = None
         self._repos = OrderedDict()
         self._init_repos()
