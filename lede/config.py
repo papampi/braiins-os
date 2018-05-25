@@ -9,6 +9,8 @@ YAML_LIST_TYPE = CommentedSeq
 
 
 class ConfigWrapper:
+    INITIALIZED = '_initialised'
+
     """
     Class to simplify access to `YAML` configuration object
     """
@@ -48,6 +50,9 @@ class ConfigWrapper:
         self.path = path
         self.formatter = formatter
 
+        # special attribute to mark initialized object have to be set last
+        setattr(self, self.INITIALIZED, True)
+
     def __deepcopy__(self, memo):
         """
         Create deep copy of config wrapper
@@ -55,9 +60,33 @@ class ConfigWrapper:
         cls = self.__class__
         result = cls.__new__(cls, root=self._root)
         memo[id(self)] = result
-        for k, v in self.__dict__.items():
-            setattr(result, k, copy.deepcopy(v, memo))
+        for key, value in self.__dict__.items():
+            if key == self.INITIALIZED:
+                # attribute which marks object initialization have to be set last
+                continue
+            setattr(result, key, copy.deepcopy(value, memo))
+        # mark initialized object
+        setattr(result, result.INITIALIZED, True)
         return result
+
+    def __delattr__(self, item):
+        """
+        Delete attribute from configuration
+        """
+        del self._root[item]
+
+    def __setattr__(self, key, value):
+        """
+        Set new attribute or modify current one in configuration
+        """
+        if self.INITIALIZED not in self.__dict__:
+            # allows attributes to be set in the __init__ method
+            return super().__setattr__(key, value)
+        elif key in self.__dict__:
+            # any class attributes are handled normally
+            super().__setattr__(key, value)
+        else:
+            self._root[key] = value
 
     def _is_dict(self) -> bool:
         """
@@ -189,6 +218,17 @@ class ConfigWrapper:
         """
         pairs = self._root.items() if self._is_dict() else enumerate(self._root)
         return ((key, ConfigWrapper(value, formatter=self.formatter)) for key, value in pairs)
+
+    def dump(self, stream):
+        """
+        Dump current configuration to the opened stream
+
+        It preserves comments from loaded from input file.
+
+        :param stream:
+            Opened stream for writing.
+        """
+        yaml.dump(self._root, stream=stream, Dumper=yaml.RoundTripDumper)
 
 
 class ListWalker:

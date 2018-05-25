@@ -6,9 +6,6 @@ import logging
 import colorlog
 import lede
 
-# constant definitions
-DEFAULT_CONFIG = 'configs/default.yml'
-
 
 class CommandManager:
     def __init__(self):
@@ -63,6 +60,11 @@ class CommandManager:
         logging.debug("Called command 'toolchain'")
         self._builder.prepare()
         self._builder.toolchain()
+
+    def release(self):
+        logging.debug("Called command 'release'")
+        self._builder.prepare()
+        self._builder.release()
 
 
 def main(argv):
@@ -132,10 +134,15 @@ def main(argv):
                                       help="set environment for LEDE toolchain")
     subparser.set_defaults(func=command.toolchain)
 
+    # create the parser for the "release" command
+    subparser = subparsers.add_parser('release',
+                                      help="create branch with configuration for release version")
+    subparser.set_defaults(func=command.release)
+
     # add global arguments
     parser.add_argument('--log', choices=['error', 'warn', 'info', 'debug'], default='info',
                         help='logging level')
-    parser.add_argument('--config', default=DEFAULT_CONFIG,
+    parser.add_argument('--config', default=lede.DEFAULT_CONFIG,
                         help='path to configuration file')
 
     # parse command line arguments

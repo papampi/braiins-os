@@ -70,6 +70,8 @@ class Builder:
     The class also provides miscellaneous methods for cleaning build directories, firmware deployment and debugging
     on target platform.
     """
+    DEFAULT_CONFIG = os.path.join('configs', 'default.yml')
+
     TARGET_ZYNQ_DM1_G9 = 'zynq-dm1-g9'
     TARGET_ZYNQ_DM1_G19 = 'zynq-dm1-g19'
 
@@ -481,6 +483,8 @@ class Builder:
         name = remote.name
         path = self._get_repo_path(name)
         repo = self._repos[name]
+        is_detached = False
+
         logging.debug("Start preparing remote '{}' in '{}'".format(name, path))
         if not repo:
             logging.info("Cloning remote '{}'".format(name))
@@ -498,14 +502,21 @@ class Builder:
                     repo.create_head(remote.branch, ref).set_tracking_branch(ref)
                     break
             else:
-                logging.error("Branch '{}' does not exist".format(remote.branch))
-                raise BuilderStop
-        branch = repo.heads[remote.branch]
-        if repo.active_branch != branch:
-            branch.checkout()
-        if remote.fetch:
-            for repo_remote in repo.remotes:
-                repo_remote.pull()
+                try:
+                    # try to detach head to specific commit
+                    repo.head.reference = repo.commit(remote.branch)
+                    is_detached = True
+                except git.BadName:
+                    logging.error("Branch '{}' does not exist".format(remote.branch))
+                    raise BuilderStop
+
+        if not is_detached:
+            branch = repo.heads[remote.branch]
+            if repo.head.is_detached or repo.active_branch != branch:
+                branch.checkout()
+            if remote.fetch:
+                for repo_remote in repo.remotes:
+                    repo_remote.pull()
 
     def _prepare_feeds(self):
         """
@@ -1615,7 +1626,9 @@ class Builder:
 
         for name, repo in self._repos.items():
             working_dir = os.path.relpath(repo.working_dir, os.getcwd())
-            logging.info("Status for '{}': '{}' ({})".format(name, working_dir, repo.active_branch.name))
+            branch_name = repo.active_branch.name if not repo.head.is_detached else \
+                'HEAD detached at {}'.format(repo.head.object.hexsha[:8])
+            logging.info("Status for '{}': '{}' ({})".format(name, working_dir, branch_name))
             clean = True
             indexed_files = repo.head.commit.diff()
             if len(indexed_files):
@@ -1693,3 +1706,58 @@ class Builder:
         if (toolchain_dir + '/bin') not in env_path:
             # export PATH only if it has not been exported already
             sys.stdout.write('export PATH="${TOOLCHAIN}/bin:$PATH";\n')
+
+    def release(self):
+        """
+        Create release branch in git based on current configuration
+
+        * check that all repositories are clean
+        * modify default YAML configuration so that all repositories points to the specific commit
+        * create new commit with modified configuration
+        * tag new commit with firmware version and push it upstream
+        """
+        repo_meta = git.Repo()
+
+        if repo_meta.is_dirty():
+            logging.error("Meta repository is dirty!")
+            raise BuilderStop
+
+        for name, repo in self._repos.items():
+            if repo.is_dirty():
+                logging.error("Repository '{}' is dirty!".format(name))
+                raise BuilderStop
+
+        # save active branch to return back after creating release
+        meta_active_branch = repo_meta.active_branch
+
+        logging.debug("Fetching all tags from remote repository...")
+        repo_meta.remotes.origin.fetch()
+
+        logging.debug("Detaching head from branch...")
+        repo_meta.head.reference = repo_meta.head.commit
+
+        logging.debug("Patching repository branches in config...")
+        config = copy.deepcopy(self._config)
+        config_repos = config.remote.repos
+        del config.remote.branch
+
+        for name, repo in self._repos.items():
+            commit_sha = repo.head.object.hexsha
+            logging.debug("Set repository '{}' to commit {}...".format(name, commit_sha))
+            config_repos.get(name).branch = commit_sha
+
+        logging.info("Saving default configuration file to {}...".format(self.DEFAULT_CONFIG))
+        with open(self.DEFAULT_CONFIG, 'w') as default_config:
+            config.dump(default_config)
+
+        logging.debug("Creating new release commit...")
+        repo_meta.index.add([self.DEFAULT_CONFIG])
+        repo_meta.index.commit("Firmware release commit")
+
+        fw_version = '{}_{}'.format(self.FEED_FIRMWARE, self._get_firmware_version())
+        logging.info("Creating new release tag '{}'...".format(fw_version))
+        repo_meta.create_tag(fw_version)
+        repo_meta.remotes.origin.push(fw_version)
+
+        # return back to active branch
+        meta_active_branch.checkout()

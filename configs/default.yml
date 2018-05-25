@@ -1,144 +1,144 @@
 miner:
-    # possible platforms are zynq-dm1-g9, zynq-dm1-g19
-    platform: zynq-dm1-g19
-    # default miner MAC address
-    mac: 00:0A:35:FF:FF:FF
-    # miner HW identifier
-#    hwid: Q50QDhdWuWq9yDr5
-    # select NAND firmware which is used for boot
-    firmware: 1
-    # default miner pool
-    pool:
-        host: stratum+tcp://stratum.slushpool.com
-        port: 3333
-        user: braiinstest.worker1
-#        pass: x
+  # possible platforms are zynq-dm1-g9, zynq-dm1-g19
+  platform: zynq-dm1-g19
+  # default miner MAC address
+  mac: 00:0A:35:FF:FF:FF
+  # miner HW identifier
+#  hwid: Q50QDhdWuWq9yDr5
+  # select NAND firmware which is used for boot
+  firmware: 1
+  # default miner pool
+  pool:
+    host: stratum+tcp://stratum.slushpool.com
+    port: 3333
+    user: braiinstest.worker1
+#    pass: x
 
 build:
-    # name of subdirectory in the build directory
-    name: '{target}'
-    # file with default LEDE configuration
-    config: defaults/devel.conf
-    # file with list of packages for build images
-    packages: configs/device_packages.yml
-    # build key for signing packages and sysupgrade tarball
-    key:
-        secret: keys/test
-        public: keys/test.pub
-    # always copy default configuration file
-    config_always: yes
-    # relative or absolute path to the build directory
-    dir: build
-    # specifies the number of jobs to run simultaneously
-    jobs: 4
-    # show all commands during build process
-    verbose: no
-    # target aliases for LEDE build system
-    aliases:
-        kernel: target/linux
-        cgminer: package/utils/cgminer
+  # name of subdirectory in the build directory
+  name: '{target}'
+  # file with default LEDE configuration
+  config: defaults/release.conf
+  # file with list of packages for build images
+  packages: defaults/release.yml
+  # build key for signing packages and sysupgrade tarball
+  key:
+    secret: keys/test
+    public: keys/test.pub
+  # always copy default configuration file
+  config_always: yes
+  # relative or absolute path to the build directory
+  dir: build
+  # specifies the number of jobs to run simultaneously
+  jobs: 4
+  # show all commands during build process
+  verbose: no
+  # target aliases for LEDE build system
+  aliases:
+    kernel: target/linux
+    cgminer: package/utils/cgminer
 
 remote:
-    # default branch for repositories
-    branch: master
-    # always fetch latest source code
-    fetch: no
-
-    # list of remote repositories
-    repos:
-        lede:
-            uri: git@gitlab.bo:x/lede.git
-        luci:
-            uri: git@gitlab.bo:x/luci.git
-        platform:
-            uri: 'git@gitlab.bo:x/{target}-io-bin.git'
-        u-boot:
-            uri: git@gitlab.bo:x/u-boot-xlnx.git
-        linux:
-            uri: git@gitlab.bo:x/linux-xlnx.git
-        cgminer:
-            uri: git@gitlab.bo:x/cgminer.git
+  # always fetch latest source code
+  fetch: no
+  # default branch for repositories
+  branch: master
+  # list of remote repositories
+  repos:
+    lede:
+      uri: git@gitlab.bo:x/lede.git
+    luci:
+      uri: git@gitlab.bo:x/luci.git
+    platform:
+      uri: git@gitlab.bo:x/{target}-io-bin.git
+    u-boot:
+      uri: git@gitlab.bo:x/u-boot-xlnx.git
+    linux:
+      uri: git@gitlab.bo:x/linux-xlnx.git
+    cgminer:
+      uri: git@gitlab.bo:x/cgminer.git
+    # it is possible to continue with any user repositories
 
 local:
-    # list of output directories for local targets
-    sd: 'output/{platform}/sd/'
-    sd_config: 'output/{platform}/sd/'
-    sd_recovery: 'output/{platform}/sd_recovery/'
-    sd_recovery_config: 'output/{platform}/sd_recovery/'
-    nand_recovery: 'output/{platform}/nand_recovery/'
-    nand_inno_v1: 'output/{platform}/nand_inno_v1/'
-    nand_inno_v2: 'output/{platform}/nand_inno_v2/'
-    feeds: 'output/{platform}/feeds/'
+  # list of output directories for local targets
+  sd: output/{platform}/sd/
+  sd_config: output/{platform}/sd/
+  sd_recovery: output/{platform}/sd_recovery/
+  sd_recovery_config: output/{platform}/sd_recovery/
+  nand_recovery: output/{platform}/nand_recovery/
+  nand_inno_v1: output/{platform}/nand_inno_v1/
+  nand_inno_v2: output/{platform}/nand_inno_v2/
+  feeds: output/{platform}/feeds/
 
 feeds:
-    # always create feeds.conf
-    create_always: no
-    # always update feeds
-    update_always: no
-    # always install feeds
-    install_always: no
+  # always create feeds.conf
+  create_always: no
+  # always update feeds
+  update_always: no
+  # always install feeds
+  install_always: no
 
 uenv:
-    # boot Linux from SD instead of NAND
-    mac: yes
-    # reset firmware to factory settings
-    factory_reset: no
-    # use for factory reset images from SD
-    sd_images: no
-    # boot Linux from SD instead of NAND
-    sd_boot: no
+  # boot Linux from SD instead of NAND
+  mac: yes
+  # reset firmware to factory settings
+  factory_reset: no
+  # use for factory reset images from SD
+  sd_images: no
+  # boot Linux from SD instead of NAND
+  sd_boot: no
 
 deploy:
-    # default target NAND or SD card
-    targets:
-#        - sd
-#        - sd_recovery
-#        - sd_config
-#        - nand_recovery
-#        - nand_firmware1
-#        - nand_firmware2
-#        - nand_config
-        - local_sd
-        - local_sd_config
-        - local_sd_recovery
-        - local_sd_recovery_config
-        - local_nand_recovery
-        - local_nand_inno_v1
-        - local_nand_inno_v2
-        - local_feeds
-    # base file which is used for concatenation with new firmware meta information
-#    feeds_base: feeds/Packages
-    # use factory or sysupgrade image for formating/updating UBI partition
-    # for first load is needed factory image
-    # factory image swipes rootfs_data overlay!
-    factory_image: yes
-    # write FPGA bitstream to NAND
-    write_bitstream: no
-    # reboot miner after successful deploy
-    reboot: no
-    # remove UUID from SD card
-    remove_extroot_uuid: no
-    # set U-Boot environment with miner configuration (MAC, HWID, firmware)
-    # it is useful for changing HWID when SD card is inserted
-    # SD card U-Boot cannot write to the NAND directly
-    set_miner_env: no
-    # overwrite NAND with new miner configuration (MAC, HWID)
-    # it is also necessary to reset uboot_env and overlay/extroot
-    write_miner_cfg: no
-    # erase U-Boot environment and set it to default one after reboot
-    reset_uboot_env: no
-    # erase NAND/UBI overlay (rootfs_data) and reinit it after reboot
-    # it is erased only overlay for current firmware (selected by miner.firmware)
-    reset_overlay: no
-    # erase SD card overlay and reinit it after reboot
-    reset_extroot: no
+  # default target NAND or SD card
+  targets:
+#  - sd
+#  - sd_recovery
+#  - sd_config
+#  - nand_recovery
+#  - nand_firmware1
+#  - nand_firmware2
+#  - nand_config
+  - local_sd
+  - local_sd_config
+  - local_sd_recovery
+  - local_sd_recovery_config
+  - local_nand_recovery
+  - local_nand_inno_v1
+  - local_nand_inno_v2
+  - local_feeds
+  # base file which is used for concatenation with new firmware meta information
+#  feeds_base: feeds/Packages
+  # use factory or sysupgrade image for formating/updating UBI partition
+  # for first load is needed factory image
+  # factory image swipes rootfs_data overlay!
+  factory_image: yes
+  # write FPGA bitstream to NAND
+  write_bitstream: no
+  # reboot miner after successful deploy
+  reboot: no
+  # remove UUID from SD card
+  remove_extroot_uuid: no
+  # set U-Boot environment with miner configuration (MAC, HWID, firmware)
+  # it is useful for changing HWID when SD card is inserted
+  # SD card U-Boot cannot write to the NAND directly
+  set_miner_env: no
+  # overwrite NAND with new miner configuration (MAC, HWID)
+  # it is also necessary to reset uboot_env and overlay/extroot
+  write_miner_cfg: no
+  # erase U-Boot environment and set it to default one after reboot
+  reset_uboot_env: no
+  # erase NAND/UBI overlay (rootfs_data) and reinit it after reboot
+  # it is erased only overlay for current firmware (selected by miner.firmware)
+  reset_overlay: no
+  # erase SD card overlay and reinit it after reboot
+  reset_extroot: no
 
-    # setting for deploy over SSH connection
-    ssh:
-        # hostname suffix which is appended to generated hostname 'miner-xxyyzz'
-        # where xxyyzz are last three numbers from MAC address
-        hostname_suffix: .bo
-        # ssh username
-        username: root
-        # ssh password
-        password:
+  # setting for deploy over SSH connection
+  ssh:
+    # hostname suffix which is appended to generated hostname 'miner-xxyyzz'
+    # where xxyyzz are last three numbers from MAC address
+    hostname_suffix: .bo
+    # ssh username
+    username: root
+    # ssh password
+    password:
