@@ -13,6 +13,7 @@ import lede.hwid as hwid
 from collections import OrderedDict, namedtuple
 from termcolor import colored
 from functools import partial
+from datetime import datetime, timezone
 
 from lede.config import ListWalker, RemoteWalker, load_config
 from lede.repo import RepoProgressPrinter
@@ -194,6 +195,11 @@ class Builder:
         logging.debug("Set bitstream target path to '{}'".format(bitstream_path))
         stream.write('CONFIG_TARGET_FPGA="{}"\n'.format(bitstream_path))
 
+    def _write_firmware_version(self, stream, config):
+        fw_version = self._get_firmware_version()
+        logging.debug("Set firmware version to '{}'".format(fw_version))
+        stream.write('{}="{}"\n'.format(config, fw_version))
+
     def _write_external_path(self, stream, config, repo_name: str, name: str):
         """
         Write absolute path to external directory of corespondent repository
@@ -215,6 +221,7 @@ class Builder:
 
     GENERATED_CONFIGS = [
         ('CONFIG_TARGET_', _write_target_config),
+        ('CONFIG_FIRMWARE_VERSION', _write_firmware_version),
         ('CONFIG_EXTERNAL_KERNEL_TREE', partial(_write_external_path, repo_name=LINUX, name='kernel')),
         ('CONFIG_EXTERNAL_CGMINER_TREE', partial(_write_external_path, repo_name=CGMINER, name='CGMiner')),
         ('CONFIG_EXTERNAL_UBOOT_TREE', partial(_write_external_path, repo_name=UBOOT, name='U-Boot')),
@@ -320,6 +327,44 @@ class Builder:
         process = subprocess.run(args, input=input, stdout=stdout, check=True, cwd=cwd, env=env, preexec_fn=init)
         if output:
             return process.stdout
+
+    def _get_firmware_version(self) -> str:
+        """
+        Return version name for firmware
+
+        The firmware version is in a form 'firmware_<date>-<patch_level>-<lede_commit>(-dirty)'
+        The patch level is incremented when several firmwares have been released in the same day.
+        The current firmware version is get from git tag which is created when release is done.
+
+        :return:
+            String with firmware version without 'firmware_' prefix.
+        """
+        repo = git.Repo()
+
+        # get commit time in RFC 3339 format
+        commit_timestamp = repo.head.object.committed_date
+        commit_time = datetime.fromtimestamp(commit_timestamp, timezone.utc)
+        fw_current = '{}_{:%Y-%m-%d}-'.format(self.FEED_FIRMWARE, commit_time)
+
+        # filter out only versions for current date
+        fw_tags = (str(tag) for tag in repo.tags if str(tag).startswith(fw_current))
+        # get latest version
+        fw_latest = next(iter(sorted(fw_tags, reverse=True)), None)
+
+        commit = repo.head.object.hexsha[:8]
+        dirty = '-dirty' if repo.is_dirty() else ''
+
+        if fw_latest:
+            fw_patch_level, fw_commit = fw_latest[len(fw_current):].split('-', 2)[:2]
+            patch_level = int(fw_patch_level)
+            if fw_commit != commit:
+                # create new version
+                patch_level += 1
+        else:
+            # when any release hasn't been created then use initial patch level 0
+            patch_level = 0
+
+        return '{:%Y-%m-%d}-{}-{}{}'.format(commit_time, patch_level, commit, dirty)
 
     def _get_repo(self, name: str) -> git.Repo:
         """
