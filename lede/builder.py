@@ -584,32 +584,35 @@ class Builder:
             logging.debug("Creating full configuration file")
             self._run('make', 'defconfig')
 
-    def _prepare_keys(self):
+    def _prepare_keys(self, user_key=None):
         """
         Prepare LEDE build keys
 
         The keys are used for signing packages and sysupgrade tarball.
         When configuration does not contain any key then LEDE generates new one.
-        """
-        build_key = self._config.build.get('key', None)
 
-        if not build_key:
+        :param user_key:
+            Tuple with secret and public key pair.
+        """
+        default_key = self._config.build.get('key', None)
+
+        if not default_key and not user_key:
             # missing build key
             return
 
-        logging.info("Preparing build key...")
+        logging.info("{} build key...".format('Preparing default' if not user_key else 'Overriding'))
 
         lede_dir = self._get_repo(self.LEDE).working_dir
-        key1_src_path = build_key.secret
-        key2_src_path = build_key.public
+        key1_src_path = default_key.secret if not user_key else user_key[0]
+        key2_src_path = default_key.public if not user_key else user_key[1]
         key1_dst_path = os.path.join(lede_dir, self.BUILD_KEY_NAME)
         key2_dst_path = os.path.join(lede_dir, self.BUILD_KEY_PUB_NAME)
 
-        if not is_target_latest(key1_src_path, key1_dst_path):
+        if user_key or not is_target_latest(key1_src_path, key1_dst_path):
             logging.debug("Copy secret build key from '{}'".format(key1_src_path))
             shutil.copy(key1_src_path, key1_dst_path)
 
-        if not is_target_latest(key2_src_path, key2_dst_path):
+        if user_key or not is_target_latest(key2_src_path, key2_dst_path):
             logging.debug("Copy public build key from '{}'".format(key2_src_path))
             shutil.copy(key2_src_path, key2_dst_path)
 
@@ -698,7 +701,7 @@ class Builder:
             logging.info("Start Linux kernel configuration...'")
             self._config_kernel()
 
-    def build(self, targets=None, jobs=None, verbose=False):
+    def build(self, targets=None, jobs=None, verbose=False, key=None):
         """
         Build the Miner firmware for current configuration
 
@@ -714,10 +717,16 @@ class Builder:
             Specifies the number of jobs (commands) to run simultaneously.
         :param verbose:
             Force to show all commands called from make build system.
+        :param key:
+            Tuple with secret and public key pair.
         """
         logging.info("Start building LEDE...'")
         jobs = jobs or self._config.build.get('jobs', 1)
         verbose = verbose or self._config.build.get('verbose', 'no') == 'yes'
+
+        # override default build key if user specified the other one on command line
+        if key:
+            self._prepare_keys(key)
 
         # set PATH environment variable
         env_path = self._config.build.get('env_path', None)

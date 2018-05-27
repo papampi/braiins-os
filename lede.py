@@ -38,8 +38,13 @@ class CommandManager:
 
     def build(self):
         logging.debug("Called command 'build'")
+        key = []
+        if self._args.key:
+            keys = self._args.key.split(':', 1)
+            key.append(keys[0])
+            key.append(keys[1] if len(keys) > 1 else '{}.pub'.format(key[0]))
         self._builder.prepare()
-        self._builder.build(targets=self._args.target, jobs=self._args.jobs, verbose=self._args.verbose)
+        self._builder.build(targets=self._args.target, jobs=self._args.jobs, verbose=self._args.verbose, key=tuple(key))
 
     def deploy(self):
         logging.debug("Called command 'deploy'")
@@ -110,6 +115,10 @@ def main(argv):
 
     subparser.add_argument('-v', '--verbose', action='store_true',
                            help='show all commands during build process')
+
+    subparser.add_argument('-k', '--key',
+                           help='specify path to build key in a format <secret>[:<public>]; '
+                                'when the <public> key is omitted then <secret>.pub is used')
 
     subparser.add_argument('target', nargs='*',
                            help='build only specific targets when specified')
