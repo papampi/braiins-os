@@ -71,6 +71,13 @@ class CommandManager:
         self._builder.prepare()
         self._builder.release()
 
+    def key(self):
+        logging.debug("Called command 'key'")
+        secret = self._args.secret
+        public = self._args.public or '{}.pub'.format(secret)
+        self._builder.prepare()
+        self._builder.generate_key(secret_path=secret, public_path=public)
+
 
 def main(argv):
     command = CommandManager()
@@ -147,6 +154,17 @@ def main(argv):
     subparser = subparsers.add_parser('release',
                                       help="create branch with configuration for release version")
     subparser.set_defaults(func=command.release)
+
+    # create the parser for the "key" command
+    subparser = subparsers.add_parser('key',
+                                      help="generate build key pair for signing firmware tarball and packages")
+    subparser.set_defaults(func=command.key)
+
+    subparser.add_argument('secret',
+                           help='path to secret key output')
+
+    subparser.add_argument('public', nargs='?',
+                           help='path to public key output; when omitted then <secret>.pub is used')
 
     # add global arguments
     parser.add_argument('--log', choices=['error', 'warn', 'info', 'debug'], default='info',

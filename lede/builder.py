@@ -1770,3 +1770,19 @@ class Builder:
 
         # return back to active branch
         meta_active_branch.checkout()
+
+    def generate_key(self, secret_path, public_path):
+        """
+        Generate build kay pair compatible with LEDE build system
+
+        :param secret_path:
+            Path to secret key output file.
+        :param public_path:
+            Path to public key output file.
+        """
+        logging.info("Generating key pair...'")
+
+        usign = self._get_utility(self.LEDE_USIGN)
+        self._run(usign, '-G',
+                  '-s', os.path.abspath(secret_path),
+                  '-p', os.path.abspath(public_path))
