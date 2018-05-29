@@ -89,11 +89,16 @@ uenv:
   sd_boot: no
 
 deploy:
-  # default target NAND or SD card
+  # default targets
+  # some targets are aliases with predefined behaviour:
+  # * nand:
+  #  - selects targets 'nand_recovery' and 'nand_config'
+  #  - enables options 'write_miner_cfg', 'reset_uboot_env' and 'reboot'
   targets:
 #  - sd
 #  - sd_recovery
 #  - sd_config
+#  - nand
 #  - nand_recovery
 #  - nand_firmware1
 #  - nand_firmware2
@@ -114,8 +119,6 @@ deploy:
   factory_image: yes
   # write FPGA bitstream to NAND
   write_bitstream: no
-  # reboot miner after successful deploy
-  reboot: no
   # remove UUID from SD card
   remove_extroot_uuid: no
   # set U-Boot environment with miner configuration (MAC, HWID, firmware)
@@ -132,6 +135,8 @@ deploy:
   reset_overlay: no
   # erase SD card overlay and reinit it after reboot
   reset_extroot: no
+  # reboot miner after successful deploy
+  reboot: no
 
   # setting for deploy over SSH connection
   ssh:

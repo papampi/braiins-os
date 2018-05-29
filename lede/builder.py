@@ -1513,13 +1513,16 @@ class Builder:
                     factory=os.path.join(generic_dir, 'lede-{}-nand-squashfs-factory.bin'.format(platform))
                 )
 
-    def deploy(self):
+    def deploy(self, targets):
         """
         Deploy Miner firmware to target platform
+
+        :param targets:
+            Override default targets from configuration file.
         """
         platform = self._config.miner.platform
         platform_target, _ = self._split_platform(platform)
-        targets = self._config.deploy.get('targets', None)
+        targets = set(targets or self._config.deploy.get('targets', []))
 
         logging.info("Start deploying Miner firmware...")
 
@@ -1535,6 +1538,12 @@ class Builder:
             'nand_firmware2',
             'local_feeds'
         ]
+        aliased_targets = {
+            'nand': {
+                'targets': {'nand_recovery', 'nand_config'},
+                'configs': (('write_miner_cfg', 'yes'), ('reset_uboot_env', 'yes'), ('reboot', 'yes'))
+            }
+        }
 
         nand_inno_versions = list('local_nand_inno_v{}'.format(version) for version in range(1, self.INNO_VERSIONS + 1))
         supported_targets.extend(nand_inno_versions)
@@ -1544,10 +1553,21 @@ class Builder:
         images_feeds = {}
 
         if targets:
+            # expand aliased targets
+            expanded_targets = set()
             for target in targets:
-                if target not in supported_targets:
+                aliased_target = aliased_targets.get(target)
+                if aliased_target:
+                    expanded_targets.update(aliased_target['targets'])
+                    for config, value in aliased_target['configs']:
+                        setattr(self._config.deploy, config, value)
+                elif target not in supported_targets:
                     logging.error("Unsupported target '{}' for firmware image".format(target))
                     raise BuilderStop
+                else:
+                    expanded_targets.add(target)
+
+            targets = expanded_targets
 
             if all(target in targets for target in ('sd', 'sd_recovery')):
                 logging.error("Targets 'sd' and 'sd_recovery' are mutually exclusive")

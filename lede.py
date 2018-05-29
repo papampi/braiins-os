@@ -49,7 +49,7 @@ class CommandManager:
     def deploy(self):
         logging.debug("Called command 'deploy'")
         self._builder.prepare()
-        self._builder.deploy()
+        self._builder.deploy(targets=self._args.targets or None)
 
     def status(self):
         logging.debug("Called command 'status'")
@@ -134,6 +134,9 @@ def main(argv):
     subparser = subparsers.add_parser('deploy',
                                       help="deploy selected image to target device")
     subparser.set_defaults(func=command.deploy)
+
+    subparser.add_argument('targets', nargs='*',
+                           help='list of targets for deployment')
 
     # create the parser for the "status" command
     subparser = subparsers.add_parser('status',
