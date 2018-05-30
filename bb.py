@@ -14,6 +14,9 @@ class CommandManager:
 
     def set_args(self, argv, args):
         config = miner.load_config(args.config)
+        if args.platform:
+            # change default platform in configuration
+            config.miner.platform = args.platform
         self._args = args
         self._builder = miner.Builder(config, argv)
 
@@ -174,6 +177,8 @@ def main(argv):
                         help='logging level')
     parser.add_argument('--config', default=miner.DEFAULT_CONFIG,
                         help='path to configuration file')
+    parser.add_argument('--platform', choices=['zynq-dm1-g9', 'zynq-dm1-g19'], nargs='?',
+                        help='change default miner platform')
 
     # parse command line arguments
     args = parser.parse_args(argv)
