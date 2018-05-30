@@ -4,7 +4,7 @@ import sys
 import argparse
 import logging
 import colorlog
-import lede
+import miner
 
 
 class CommandManager:
@@ -13,9 +13,9 @@ class CommandManager:
         self._builder = None
 
     def set_args(self, argv, args):
-        config = lede.load_config(args.config)
+        config = miner.load_config(args.config)
         self._args = args
-        self._builder = lede.Builder(config, argv)
+        self._builder = miner.Builder(config, argv)
 
     def prepare(self):
         logging.debug("Called command 'prepare'")
@@ -172,7 +172,7 @@ def main(argv):
     # add global arguments
     parser.add_argument('--log', choices=['error', 'warn', 'info', 'debug'], default='info',
                         help='logging level')
-    parser.add_argument('--config', default=lede.DEFAULT_CONFIG,
+    parser.add_argument('--config', default=miner.DEFAULT_CONFIG,
                         help='path to configuration file')
 
     # parse command line arguments
@@ -202,5 +202,5 @@ if __name__ == "__main__":
     # execute only if run as a script
     try:
         main(sys.argv[1:])
-    except lede.BuilderStop:
+    except miner.BuilderStop:
         sys.exit(1)

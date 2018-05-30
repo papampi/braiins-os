@@ -8,17 +8,17 @@ import git
 import io
 import os
 import sys
-import lede.hwid as hwid
+import miner.hwid as hwid
 
 from collections import OrderedDict, namedtuple
 from termcolor import colored
 from functools import partial
 from datetime import datetime, timezone
 
-from lede.config import ListWalker, RemoteWalker, load_config
-from lede.repo import RepoProgressPrinter
-from lede.ssh import SSHManager
-from lede.packages import Packages
+from miner.config import ListWalker, RemoteWalker, load_config
+from miner.repo import RepoProgressPrinter
+from miner.ssh import SSHManager
+from miner.packages import Packages
 
 
 class BuilderStop(Exception):
@@ -75,7 +75,7 @@ class Builder:
     TARGET_ZYNQ_DM1_G9 = 'zynq-dm1-g9'
     TARGET_ZYNQ_DM1_G19 = 'zynq-dm1-g19'
 
-    LEDE_META_DIR = 'lede'
+    LEDE_META_DIR = 'miner'
     LEDE_META_SSH = 'ssh.py'
     LEDE_META_HWID = 'hwid.py'
 
