@@ -62,9 +62,9 @@ image_recovery:
     list:
         - miner_recovery
 
-image_inno:
+image_upgrade:
     base:
         - core
         - block_mount
     list:
-        - inno_upgrade
+        - miner_upgrade

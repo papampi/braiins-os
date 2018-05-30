@@ -66,8 +66,8 @@ local:
   sd_recovery: output/{platform}/sd_recovery/
   sd_recovery_config: output/{platform}/sd_recovery/
   nand_recovery: output/{platform}/nand_recovery/
-  nand_inno_v1: output/{platform}/nand_inno_v1/
-  nand_inno_v2: output/{platform}/nand_inno_v2/
+  nand_dm_v1: output/{platform}/nand_dm_v1/
+  nand_dm_v2: output/{platform}/nand_dm_v2/
   feeds: output/{platform}/feeds/
 
 feeds:
@@ -108,8 +108,8 @@ deploy:
   - local_sd_recovery
   - local_sd_recovery_config
   - local_nand_recovery
-  - local_nand_inno_v1
-  - local_nand_inno_v2
+  - local_nand_dm_v1
+  - local_nand_dm_v2
   - local_feeds
   # base file which is used for concatenation with new firmware meta information
 #  feeds_base: feeds/Packages
