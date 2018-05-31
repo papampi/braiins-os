@@ -9,35 +9,45 @@ import miner
 
 class CommandManager:
     def __init__(self):
+        self._argv = None
         self._args = None
-        self._builder = None
+        self._config = None
 
     def set_args(self, argv, args):
-        config = miner.load_config(args.config)
+        self._argv = argv
+        self._args = args
+        self._config = miner.load_config(args.config)
+
         if args.platform:
             # change default platform in configuration
-            config.miner.platform = args.platform
-        self._args = args
-        self._builder = miner.Builder(config, argv)
+            self._config.miner.platform = args.platform
+
+    def get_builder(self):
+        """
+        Return miner builder for current configuration
+        """
+        return miner.Builder(self._config, self._argv)
 
     def prepare(self):
         logging.debug("Called command 'prepare'")
-        self._builder.prepare(fetch=self._args.fetch)
+        builder = self.get_builder()
+        builder.prepare(fetch=self._args.fetch)
 
     def clean(self):
         logging.debug("Called command 'clean'")
-        purge = self._args.purge
-        if purge:
-            self._builder.clean(purge=True)
-            self._builder.prepare()
+        builder = self.get_builder()
+        if self._args.purge:
+            builder.clean(purge=True)
+            builder.prepare()
         else:
-            self._builder.prepare()
-            self._builder.clean()
+            builder.prepare()
+            builder.clean()
 
     def config(self):
         logging.debug("Called command 'config'")
-        self._builder.prepare()
-        self._builder.config(kernel=self._args.kernel)
+        builder = self.get_builder()
+        builder.prepare()
+        builder.config(kernel=self._args.kernel)
 
     def build(self):
         logging.debug("Called command 'build'")
@@ -46,40 +56,53 @@ class CommandManager:
             keys = self._args.key.split(':', 1)
             key.append(keys[0])
             key.append(keys[1] if len(keys) > 1 else '{}.pub'.format(key[0]))
-        self._builder.prepare()
-        self._builder.build(targets=self._args.target, jobs=self._args.jobs, verbose=self._args.verbose, key=tuple(key))
+
+        builder = self.get_builder()
+        builder.prepare()
+        builder.build(targets=self._args.target, jobs=self._args.jobs, verbose=self._args.verbose, key=tuple(key))
 
     def deploy(self):
         logging.debug("Called command 'deploy'")
-        self._builder.prepare()
-        self._builder.deploy(targets=self._args.targets or None)
+        builder = self.get_builder()
+        builder.prepare()
+        builder.deploy(targets=self._args.targets or None)
 
     def status(self):
         logging.debug("Called command 'status'")
-        self._builder.status()
+        builder = self.get_builder()
+        builder.status()
 
     def debug(self):
         logging.debug("Called command 'debug'")
-        self._builder.prepare()
-        self._builder.build()
-        self._builder.debug()
+        builder = self.get_builder()
+        builder.prepare()
+        builder.build()
+        builder.debug()
 
     def toolchain(self):
         logging.debug("Called command 'toolchain'")
-        self._builder.prepare()
-        self._builder.toolchain()
+        builder = self.get_builder()
+        builder.prepare()
+        builder.toolchain()
 
     def release(self):
         logging.debug("Called command 'release'")
-        self._builder.prepare()
-        self._builder.release()
+        sysupgrade = self._config.build.sysupgrade
+        for include in set(self._args.include or []):
+            setattr(sysupgrade, include, 'yes')
+
+        builder = self.get_builder()
+        builder.prepare()
+        builder.release()
 
     def key(self):
         logging.debug("Called command 'key'")
         secret = self._args.secret
         public = self._args.public or '{}.pub'.format(secret)
-        self._builder.prepare()
-        self._builder.generate_key(secret_path=secret, public_path=public)
+
+        builder = self.get_builder()
+        builder.prepare()
+        builder.generate_key(secret_path=secret, public_path=public)
 
 
 def main(argv):
@@ -160,6 +183,9 @@ def main(argv):
     subparser = subparsers.add_parser('release',
                                       help="create branch with configuration for release version")
     subparser.set_defaults(func=command.release)
+
+    subparser.add_argument('--include', choices=['command', 'uboot', 'fpga'], nargs='*',
+                           help='components included in sysupgrade (firmware)')
 
     # create the parser for the "key" command
     subparser = subparsers.add_parser('key',

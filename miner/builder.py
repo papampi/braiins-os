@@ -184,18 +184,38 @@ class Builder:
         device_name = platform.replace('-', '_')
         bitstream_path = self._get_bitstream_path()
 
-        stream.write('CONFIG_TARGET_{}=y\n'.format(target_name))
-        stream.write('CONFIG_TARGET_{}=y\n'.format(device_name))
-        stream.write('CONFIG_TARGET_MULTI_PROFILE=y\n')
-        stream.write('CONFIG_TARGET_PER_DEVICE_ROOTFS=y\n')
+        stream.write('{}{}=y\n'.format(config, target_name))
+        stream.write('{}{}=y\n'.format(config, device_name))
+        stream.write('{}MULTI_PROFILE=y\n'.format(config))
+        stream.write('{}PER_DEVICE_ROOTFS=y\n'.format(config))
 
         for image in self.CONFIG_DEVICES:
             packages = ' '.join(ListWalker(image_packages, self.PACKAGE_LIST_PREFIX + image))
-            stream.write('CONFIG_TARGET_DEVICE_{}_DEVICE_{}=y\n'.format(device_name, image))
-            stream.write('CONFIG_TARGET_DEVICE_PACKAGES_{}_DEVICE_{}="{}"\n'.format(device_name, image, packages))
+            stream.write('{}DEVICE_{}_DEVICE_{}=y\n'.format(config, device_name, image))
+            stream.write('{}DEVICE_PACKAGES_{}_DEVICE_{}="{}"\n'.format(config, device_name, image, packages))
 
         logging.debug("Set bitstream target path to '{}'".format(bitstream_path))
-        stream.write('CONFIG_TARGET_FPGA="{}"\n'.format(bitstream_path))
+        stream.write('{}FPGA="{}"\n'.format(config, bitstream_path))
+
+    def _write_sysupgrade(self, stream, config):
+        """
+        Write all settings concerning sysupgrade components
+
+        :param stream:
+            Opened stream for writing configuration.
+        :param config:
+            Configuration name prefix.
+        """
+        sysupgrade = self._config.build.sysupgrade
+        components = [
+            ('command', 'COMMAND'),
+            ('uboot', 'UBOOT'),
+            ('fpga', 'FPGA')
+        ]
+
+        for src_name, dst_name in components:
+            if sysupgrade.get(src_name) == 'yes':
+                stream.write('{}{}=y\n'.format(config, dst_name))
 
     def _write_firmware_version(self, stream, config):
         fw_version = self._get_firmware_version()
@@ -223,6 +243,7 @@ class Builder:
 
     GENERATED_CONFIGS = [
         ('CONFIG_TARGET_', _write_target_config),
+        ('CONFIG_SYSUPGRADE_WITH_', _write_sysupgrade),
         ('CONFIG_FIRMWARE_VERSION', _write_firmware_version),
         ('CONFIG_EXTERNAL_KERNEL_TREE', partial(_write_external_path, repo_name=LINUX, name='kernel')),
         ('CONFIG_EXTERNAL_CGMINER_TREE', partial(_write_external_path, repo_name=CGMINER, name='CGMiner')),

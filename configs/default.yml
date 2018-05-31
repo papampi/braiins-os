@@ -37,6 +37,11 @@ build:
   aliases:
     kernel: target/linux
     cgminer: package/utils/cgminer
+  # components included in sysupgrade (firmware)
+  sysupgrade:
+    command: no
+    uboot: no
+    fpga: no
 
 remote:
   # always fetch latest source code
