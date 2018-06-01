@@ -18,15 +18,21 @@ class CommandManager:
         self._args = args
         self._config = miner.load_config(args.config)
 
+        # change default platform or mac in configuration
         if args.platform:
-            # change default platform in configuration
             self._config.miner.platform = args.platform
+        if args.mac:
+            self._config.miner.mac = args.mac
 
         # set optional keys to default value
         self._config.setdefault('build.jobs', 1)
         self._config.setdefault('build.verbose', 'no')
         self._config.setdefault('remote.fetch', 'no')
         self._config.setdefault('remote.fetch_always', 'no')
+        self._config.setdefault('uenv.mac', 'yes')
+        self._config.setdefault('uenv.factory_reset', 'no')
+        self._config.setdefault('uenv.sd_images', 'no')
+        self._config.setdefault('uenv.sd_boot', 'no')
 
     def get_builder(self):
         """
@@ -78,6 +84,11 @@ class CommandManager:
 
     def deploy(self):
         logging.debug("Called command 'deploy'")
+        uenv = self._config.uenv
+        for option in set(self._args.uenv or []):
+            setattr(uenv, option, 'yes')
+        if self._args.hostname:
+            self._config.deploy.ssh.hostname = self._args.hostname
 
         builder = self.get_builder()
         builder.prepare()
@@ -106,6 +117,10 @@ class CommandManager:
         sysupgrade = self._config.build.sysupgrade
         for include in set(self._args.include or []):
             setattr(sysupgrade, include, 'yes')
+
+        if not self._args.no_fetch:
+            # always fetch all repositories before creating release
+            self._config.remote.fetch_always = 'yes'
 
         builder = self.get_builder()
         builder.prepare()
@@ -169,6 +184,10 @@ def main(argv):
     subparser = subparsers.add_parser('deploy',
                                       help="deploy selected image to target device")
     subparser.set_defaults(func=command.deploy)
+    subparser.add_argument('--hostname', nargs='?',
+                           help='ip address or hostname of remote miner with ssh server')
+    subparser.add_argument('--uenv', choices=['mac', 'factory_reset', 'sd_images', 'sd_boot'], nargs='*',
+                           help='enable some options in uEnv.txt for SD images')
     subparser.add_argument('targets', nargs='*',
                            help='list of targets for deployment')
 
@@ -193,6 +212,8 @@ def main(argv):
     subparser.set_defaults(func=command.release)
     subparser.add_argument('--include', choices=['command', 'uboot', 'fpga'], nargs='*',
                            help='components included in sysupgrade (firmware)')
+    subparser.add_argument('--no-fetch', action='store_true',
+                           help='do not force fetching all repositories before creating release configuration')
 
     # create the parser for the "key" command
     subparser = subparsers.add_parser('key',
@@ -210,6 +231,8 @@ def main(argv):
                         help='path to configuration file')
     parser.add_argument('--platform', choices=['zynq-dm1-g9', 'zynq-dm1-g19'], nargs='?',
                         help='change default miner platform')
+    parser.add_argument('--mac', nargs='?',
+                        help='MAC address of miner (it is also used for remote host name determination)')
 
     # parse command line arguments
     args = parser.parse_args(argv)
