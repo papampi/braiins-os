@@ -101,6 +101,12 @@ deploy:
   # * nand:
   #  - selects targets 'nand_recovery' and 'nand_config'
   #  - enables options 'write_miner_cfg', 'reset_uboot_env' and 'reboot'
+  # * local_sd:
+  #  - deploy SD images to local directory
+  #  - selects target 'local_sd_config'
+  # * local_sd_recovery:
+  #  - deploy SD recovery images to local directory
+  #  - selects target 'local_sd_recovery_config'
   targets:
 #  - sd
 #  - sd_recovery

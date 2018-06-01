@@ -1541,18 +1541,27 @@ class Builder:
 
         supported_targets = [
             'sd_config',
-            'sd', 'local_sd', 'local_sd_config',
-            'sd_recovery', 'local_sd_recovery', 'local_sd_recovery_config',
+            'sd',
+            'sd_recovery',
             'nand_config',
-            'nand_recovery', 'local_nand_recovery',
+            'nand_recovery',
             'nand_firmware1',
             'nand_firmware2',
+            'local_sd_config',
+            'local_sd_recovery_config',
+            'local_nand_recovery',
             'local_feeds'
         ]
         aliased_targets = {
             'nand': {
                 'targets': {'nand_recovery', 'nand_config'},
                 'configs': (('write_miner_cfg', 'yes'), ('reset_uboot_env', 'yes'), ('reboot', 'yes'))
+            },
+            'local_sd': {
+                'targets': {'local_sd', 'local_sd_config'},
+            },
+            'local_sd_recovery': {
+                'targets': {'local_sd_recovery', 'local_sd_recovery_config'},
             }
         }
 
@@ -1570,7 +1579,7 @@ class Builder:
                 aliased_target = aliased_targets.get(target)
                 if aliased_target:
                     expanded_targets.update(aliased_target['targets'])
-                    for config, value in aliased_target['configs']:
+                    for config, value in aliased_target.get('configs') or []:
                         setattr(self._config.deploy, config, value)
                 elif target not in supported_targets:
                     logging.error("Unsupported target '{}' for firmware image".format(target))
