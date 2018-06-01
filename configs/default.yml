@@ -44,8 +44,10 @@ build:
     fpga: no
 
 remote:
-  # always fetch latest source code
+  # default configuration for fetching latest repository
   fetch: no
+  # always fetch each repositories (it cannot be overridden)
+  fetch_always: no
   # default branch for repositories
   branch: master
   # list of remote repositories

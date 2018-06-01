@@ -7,6 +7,8 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 YAML_DICT_TYPE = CommentedMap
 YAML_LIST_TYPE = CommentedSeq
 
+EmptyDict = CommentedMap
+
 
 class ConfigWrapper:
     INITIALIZED = '_initialised'
@@ -202,11 +204,44 @@ class ConfigWrapper:
         :return:
             Value of item or default value when item is not set.
         """
+        if not path:
+            raise AttributeError("Missing path to the configuration attrigute")
         current = self
         for item in path.split('.'):
-            current = current.get_item(item, default=default)
+            current = current.get_item(item)
             if current is None:
+                current = default
                 break
+        return current
+
+    def setdefault(self, path, default=None):
+        """
+        Return value of item or set and return default value when item is not set
+
+        :param path:
+            Path to the attribute specified by attributes separated by dot.
+        :param default:
+            Default value used when no value is set for specified item.
+        :return:
+            Value of item or default value when item is not set.
+        """
+        if not path:
+            raise AttributeError("Missing path to the configuration attrigute")
+        previous = self
+        current = default
+        items = iter(path.split('.'))
+        for item in items:
+            current = previous.get_item(item)
+            if current is None:
+                current = item
+                for next_item in items:
+                    setattr(previous, current, EmptyDict())
+                    previous = previous.get(current)
+                    current = next_item
+                setattr(previous, current, default)
+                current = previous.get(current)
+                break
+            previous = current
         return current
 
     def items(self):
@@ -284,20 +319,18 @@ class RemoteWalker:
     """
     Remote = namedtuple('Remote', ['name', 'uri', 'branch', 'fetch'])
 
-    def __init__(self, remote, fetch: bool):
+    def __init__(self, remote):
         """
         Initialize RemoteWalker with remote attribute
 
         :param remote:
             Attribute remote from configuration file.
-        :param fetch:
-            If True then it is possible override configuration file by forcing fetch.
         """
         self.repos = remote.repos
         # get global settings
         self._branch = remote.get('branch', 'master')
         self._fetch = remote.get('fetch', 'yes')
-        self._fetch_force = fetch
+        self._fetch_force = remote.fetch_always == 'yes'
 
     def __iter__(self):
         """

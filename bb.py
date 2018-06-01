@@ -22,6 +22,12 @@ class CommandManager:
             # change default platform in configuration
             self._config.miner.platform = args.platform
 
+        # set optional keys to default value
+        self._config.setdefault('build.jobs', 1)
+        self._config.setdefault('build.verbose', 'no')
+        self._config.setdefault('remote.fetch', 'no')
+        self._config.setdefault('remote.fetch_always', 'no')
+
     def get_builder(self):
         """
         Return miner builder for current configuration
@@ -30,8 +36,11 @@ class CommandManager:
 
     def prepare(self):
         logging.debug("Called command 'prepare'")
+        if self._args.fetch:
+            self._config.remote.fetch_always = 'yes'
+
         builder = self.get_builder()
-        builder.prepare(fetch=self._args.fetch)
+        builder.prepare()
 
     def clean(self):
         logging.debug("Called command 'clean'")
@@ -51,18 +60,25 @@ class CommandManager:
 
     def build(self):
         logging.debug("Called command 'build'")
-        key = []
+        force_key = False
         if self._args.key:
             keys = self._args.key.split(':', 1)
-            key.append(keys[0])
-            key.append(keys[1] if len(keys) > 1 else '{}.pub'.format(key[0]))
+            key = self._config.setdefault('build.key', miner.ConfigDict())
+            key.secret = keys[0]
+            key.public = keys[1] if len(keys) > 1 else '{}.pub'.format(key[0])
+            force_key = True
+        if self._args.jobs:
+            self._config.build.jobs = self._args.jobs
+        if self._args.verbose:
+            self._config.build.verbose = 'yes'
 
         builder = self.get_builder()
         builder.prepare()
-        builder.build(targets=self._args.target, jobs=self._args.jobs, verbose=self._args.verbose, key=tuple(key))
+        builder.build(targets=self._args.target, force_key=force_key)
 
     def deploy(self):
         logging.debug("Called command 'deploy'")
+
         builder = self.get_builder()
         builder.prepare()
         builder.deploy(targets=self._args.targets or None)
@@ -118,7 +134,6 @@ def main(argv):
     subparser = subparsers.add_parser('prepare',
                                       help="prepare source directory")
     subparser.set_defaults(func=command.prepare)
-
     subparser.add_argument('--fetch', action='store_true',
                            help='force to fetch all repositories')
 
@@ -126,7 +141,6 @@ def main(argv):
     subparser = subparsers.add_parser('clean',
                                       help="clean source directory")
     subparser.set_defaults(func=command.clean)
-
     subparser.add_argument('--purge', action='store_true',
                            help='reset all repositories to its initial state')
 
@@ -134,7 +148,6 @@ def main(argv):
     subparser = subparsers.add_parser('config',
                                       help="change default configuration of LEDE project")
     subparser.set_defaults(func=command.config)
-
     subparser.add_argument('--kernel', action='store_true',
                            help='configure Linux kernel')
 
@@ -142,17 +155,13 @@ def main(argv):
     subparser = subparsers.add_parser('build',
                                       help="build image for current configuration")
     subparser.set_defaults(func=command.build)
-
     subparser.add_argument('-j', '--jobs', type=int,
                            help='specifies the number of jobs to run simultaneously')
-
     subparser.add_argument('-v', '--verbose', action='store_true',
                            help='show all commands during build process')
-
     subparser.add_argument('-k', '--key',
                            help='specify path to build key in a format <secret>[:<public>]; '
                                 'when the <public> key is omitted then <secret>.pub is used')
-
     subparser.add_argument('target', nargs='*',
                            help='build only specific targets when specified')
 
@@ -160,7 +169,6 @@ def main(argv):
     subparser = subparsers.add_parser('deploy',
                                       help="deploy selected image to target device")
     subparser.set_defaults(func=command.deploy)
-
     subparser.add_argument('targets', nargs='*',
                            help='list of targets for deployment')
 
@@ -183,7 +191,6 @@ def main(argv):
     subparser = subparsers.add_parser('release',
                                       help="create branch with configuration for release version")
     subparser.set_defaults(func=command.release)
-
     subparser.add_argument('--include', choices=['command', 'uboot', 'fpga'], nargs='*',
                            help='components included in sysupgrade (firmware)')
 
@@ -191,10 +198,8 @@ def main(argv):
     subparser = subparsers.add_parser('key',
                                       help="generate build key pair for signing firmware tarball and packages")
     subparser.set_defaults(func=command.key)
-
     subparser.add_argument('secret',
                            help='path to secret key output')
-
     subparser.add_argument('public', nargs='?',
                            help='path to public key output; when omitted then <secret>.pub is used')
 
