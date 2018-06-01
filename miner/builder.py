@@ -1790,6 +1790,9 @@ class Builder:
         with open(self.DEFAULT_CONFIG, 'w') as default_config:
             config.dump(default_config)
 
+        # always checkout all repositories to correct commit
+        config.remote.fetch_always = 'yes'
+
         logging.debug("Creating new release commit...")
         repo_meta.index.add([self.DEFAULT_CONFIG])
         repo_meta.index.commit("Firmware release commit")
