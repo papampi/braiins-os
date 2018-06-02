@@ -153,9 +153,13 @@ deploy:
 
   # setting for deploy over SSH connection
   ssh:
-    # hostname suffix which is appended to generated hostname 'miner-xxyyzz'
+    # ip address or hostname of remote miner
+    # when omitted then generated hostname 'miner-xxyyzz' is used
     # where xxyyzz are last three numbers from MAC address
-    hostname_suffix: .bo
+#    hostname: 192.168.1.1
+    # hostname suffix which is appended to generated hostname
+    # it is not used when hostname is specified
+#    hostname_suffix: .bo
     # ssh username
     username: root
     # ssh password
