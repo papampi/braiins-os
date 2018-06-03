@@ -18,13 +18,10 @@ class CommandManager:
         self._args = args
         self._config = miner.load_config(args.config)
 
-        # change default platform or mac in configuration
-        if args.platform:
-            self._config.miner.platform = args.platform
-        if args.mac:
-            self._config.miner.mac = args.mac
-
         # set optional keys to default value
+        self._config.setdefault('miner.pool.host', 'stratum+tcp://stratum.slushpool.com')
+        self._config.setdefault('miner.pool.port', 3333)
+        self._config.setdefault('miner.pool.user', 'braiinstest.worker1')
         self._config.setdefault('build.jobs', 1)
         self._config.setdefault('build.verbose', 'no')
         self._config.setdefault('remote.fetch', 'no')
@@ -33,6 +30,22 @@ class CommandManager:
         self._config.setdefault('uenv.factory_reset', 'no')
         self._config.setdefault('uenv.sd_images', 'no')
         self._config.setdefault('uenv.sd_boot', 'no')
+
+        # change default platform or mac in configuration
+        if args.platform:
+            self._config.miner.platform = args.platform
+        if args.mac:
+            self._config.miner.mac = args.mac
+
+        # change default pool settings
+        if args.pool_url:
+            scheme, netloc = ([None] + args.pool_url.split('://', 1))[-2:]
+            server, port = (netloc.rsplit(':', 1) + [None])[:2]
+            self._config.miner.pool.host = '{}://{}'.format(scheme, server) if scheme else server
+            if port:
+                self._config.miner.pool.port = int(port)
+        if args.pool_user:
+            self._config.miner.pool.user = args.pool_user
 
     def get_builder(self):
         """
@@ -233,6 +246,10 @@ def main(argv):
                         help='change default miner platform')
     parser.add_argument('--mac', nargs='?',
                         help='MAC address of miner (it is also used for remote host name determination)')
+    parser.add_argument('--pool-url', nargs='?',
+                        help='address of pool server in a format <host>[:<port>]')
+    parser.add_argument('--pool-user', nargs='?',
+                        help='name of pool worker')
 
     # parse command line arguments
     args = parser.parse_args(argv)
