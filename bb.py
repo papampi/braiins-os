@@ -102,10 +102,26 @@ class CommandManager:
             setattr(uenv, option, 'yes')
         if self._args.hostname:
             self._config.deploy.ssh.hostname = self._args.hostname
+        # override default targets from command line
+        if self._args.target:
+            self._config.deploy.targets = miner.ConfigList()
+            targets = self._config.deploy.targets
+            local = self._config.local
+            for target in self._args.target:
+                target, path = (target.split(':', 1) + [None])[:2]
+                targets.append(target)
+                if path:
+                    if not target.startswith('local_'):
+                        logging.error("Target '{}' cannot have path specification".format(target))
+                        raise miner.BuilderStop
+                    target = target[6:]
+                    if target in ['sd', 'sd_recovery']:
+                        setattr(local, target + '_config', path)
+                    setattr(local, target, path)
 
         builder = self.get_builder()
         builder.prepare()
-        builder.deploy(targets=self._args.targets or None)
+        builder.deploy()
 
     def status(self):
         logging.debug("Called command 'status'")
@@ -201,8 +217,9 @@ def main(argv):
                            help='ip address or hostname of remote miner with ssh server')
     subparser.add_argument('--uenv', choices=['mac', 'factory_reset', 'sd_images', 'sd_boot'], nargs='*',
                            help='enable some options in uEnv.txt for SD images')
-    subparser.add_argument('targets', nargs='*',
-                           help='list of targets for deployment')
+    subparser.add_argument('target', nargs='*',
+                           help='list of targets for deployment (local target can specify also output directory '
+                                'in a format <target>[:<path>])')
 
     # create the parser for the "status" command
     subparser = subparsers.add_parser('status',

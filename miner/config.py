@@ -8,6 +8,7 @@ YAML_DICT_TYPE = CommentedMap
 YAML_LIST_TYPE = CommentedSeq
 
 EmptyDict = CommentedMap
+EmptyList = CommentedSeq
 
 
 class ConfigWrapper:
@@ -243,6 +244,12 @@ class ConfigWrapper:
                 break
             previous = current
         return current
+
+    def append(self, item):
+        """
+        Appends a passed item into the existing list
+        """
+        self._root.append(ConfigWrapper(item))
 
     def items(self):
         """

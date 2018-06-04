@@ -1524,16 +1524,13 @@ class Builder:
                     factory=os.path.join(generic_dir, 'lede-{}-nand-squashfs-factory.bin'.format(platform))
                 )
 
-    def deploy(self, targets):
+    def deploy(self):
         """
         Deploy Miner firmware to target platform
-
-        :param targets:
-            Override default targets from configuration file.
         """
         platform = self._config.miner.platform
         platform_target, _ = self._split_platform(platform)
-        targets = set(targets or self._config.deploy.get('targets', []))
+        targets = self._config.deploy.targets
 
         logging.info("Start deploying Miner firmware...")
 
