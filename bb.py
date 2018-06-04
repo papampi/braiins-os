@@ -31,21 +31,9 @@ class CommandManager:
         self._config.setdefault('uenv.sd_images', 'no')
         self._config.setdefault('uenv.sd_boot', 'no')
 
-        # change default platform or mac in configuration
+        # change default platform in configuration
         if args.platform:
             self._config.miner.platform = args.platform
-        if args.mac:
-            self._config.miner.mac = args.mac
-
-        # change default pool settings
-        if args.pool_url:
-            scheme, netloc = ([None] + args.pool_url.split('://', 1))[-2:]
-            server, port = (netloc.rsplit(':', 1) + [None])[:2]
-            self._config.miner.pool.host = '{}://{}'.format(scheme, server) if scheme else server
-            if port:
-                self._config.miner.pool.port = int(port)
-        if args.pool_user:
-            self._config.miner.pool.user = args.pool_user
 
     def get_builder(self):
         """
@@ -97,11 +85,26 @@ class CommandManager:
 
     def deploy(self):
         logging.debug("Called command 'deploy'")
+        # change target MAC address
+        if self._args.mac:
+            self._config.miner.mac = self._args.mac
+        # change target hostname and override MAC determination
+        if self._args.hostname:
+            self._config.deploy.ssh.hostname = self._args.hostname
+        # change default pool settings
+        if self._args.pool_url:
+            scheme, netloc = ([None] + self._args.pool_url.split('://', 1))[-2:]
+            server, port = (netloc.rsplit(':', 1) + [None])[:2]
+            self._config.miner.pool.host = '{}://{}'.format(scheme, server) if scheme else server
+            if port:
+                self._config.miner.pool.port = int(port)
+        if self._args.pool_user:
+            self._config.miner.pool.user = self._args.pool_user
+        # change uEnv.txt configuration
         uenv = self._config.uenv
         for option in set(self._args.uenv or []):
             setattr(uenv, option, 'yes')
-        if self._args.hostname:
-            self._config.deploy.ssh.hostname = self._args.hostname
+
         # override default targets from command line
         if self._args.target:
             self._config.deploy.targets = miner.ConfigList()
@@ -213,8 +216,14 @@ def main(argv):
     subparser = subparsers.add_parser('deploy',
                                       help="deploy selected image to target device")
     subparser.set_defaults(func=command.deploy)
+    subparser.add_argument('--mac', nargs='?',
+                           help='MAC address of miner (it is also used for remote host name determination)')
     subparser.add_argument('--hostname', nargs='?',
                            help='ip address or hostname of remote miner with ssh server')
+    subparser.add_argument('--pool-url', nargs='?',
+                           help='address of pool server in a format <host>[:<port>]')
+    subparser.add_argument('--pool-user', nargs='?',
+                           help='name of pool worker')
     subparser.add_argument('--uenv', choices=['mac', 'factory_reset', 'sd_images', 'sd_boot'], nargs='*',
                            help='enable some options in uEnv.txt for SD images')
     subparser.add_argument('target', nargs='*',
@@ -261,12 +270,6 @@ def main(argv):
                         help='path to configuration file')
     parser.add_argument('--platform', choices=['zynq-dm1-g9', 'zynq-dm1-g19'], nargs='?',
                         help='change default miner platform')
-    parser.add_argument('--mac', nargs='?',
-                        help='MAC address of miner (it is also used for remote host name determination)')
-    parser.add_argument('--pool-url', nargs='?',
-                        help='address of pool server in a format <host>[:<port>]')
-    parser.add_argument('--pool-user', nargs='?',
-                        help='name of pool worker')
 
     # parse command line arguments
     args = parser.parse_args(argv)
