@@ -1,6 +1,6 @@
-# Miner Firmware Build System
+# Braiins Build (BB) System of Miner Firmware
 
-The Miner build system is based on the LEDE build system and it is only wrapper around this system.
+The braiins build system is based on the LEDE build system and it is only wrapper around this system.
 
 It extends the LEDE build system with following features:
 
@@ -9,7 +9,10 @@ It extends the LEDE build system with following features:
 * out-of-tree repositories for development
 * status of all developed repositories
 * cleaning and purging repositories
-* setup environment for using LEDE toolchain in external projects
+* setup environment for using the LEDE toolchain in external projects
+* firmware deployment to NAND/SD over ssh connection or to local repository
+* release version control and firmware signing
+* preparation of feed server with firmware updates
 
 ## Getting Started
 
@@ -18,104 +21,534 @@ purposes. See deployment for notes on how to deploy the project on a live system
 
 ### Prerequisites
 
-The Miner build system is written for *Python 3.5*. The only prerequisite is virtualenv tool:
+The Miner build system is written for *Python 3.5*. The only prerequisites are:
+
+* Python 3.5.x
+* virtualenv 15.x.x
+* pip3 9.x.x
 
 ### Installing
 
-Clone git repository with *lede-meta* to some directory.
+Clone git repository to some directory and setup system environment:
 
-```commandline
-```
-# clone LEDE build system from git
-$ git clone git@gitlab.bo:x/lede-meta.git
-$ cd lede-meta
+```bash
+# clone braiins build system from git
+$ git clone <repo> miner
+$ cd miner
 $ virtualenv --python=/usr/bin/python3.5 .env
 $ source .env/bin/activate
-$ pip install -r requirements.txt
+$ pip3 install -r requirements.txt
 ```
 
 ## Building
 
-For building firmware image with default configuration it can be simply called *lede.py* script with *build* command.
+For building firmware image with default configuration it can be simply called *bb.py* script with *build* command.
 
-Default configuration is set for **development** and not for **release** image!
-
-```commandline
+```bash
 # build firmware image with default configuration
-$ ./lede.py build
+$ ./bb.py build
 
-# build firmware image with release configuration
-$ ./lede.py --config configs/release.yml build
+# build firmware image with user configuration
+$ ./bb.py --config configs/user.yml build
 ```
 
-All repositories are stored in **build**/<*target*> directory where *target* is specified in *YAML* configuration file
-under *build.name* attribute.
+All repositories are stored in **build**/*\<target\>* directory where *target* is specified in *YAML* configuration file
+under a *build.name* attribute.
+
+### Platform Selection
+
+The braiins build system supports multiple targets with the same base configuration. Currently the following platforms
+are supported:
+
+* *zynq-dm1-g9* (DragonMint v1 with G9 Control Board)
+* *zynq-dm1-g19* (DragonMint v1 with G19 Control Board)
+
+The platform **zynq-dm1-g19** is specified in the default configuration file but it can be modified from command line
+with a *platform* parameter:
+
+```bash
+# build firmware image with default configuration for DragonMint G9
+$ ./bb.py --platform zynq-dm1-g9 build
+
+# build firmware image with user configuration for DragonMint G19
+$ ./bb.py --config configs/user.yml --platform zynq-dm1-g19 build
+```
+
+### Firmware Release
+
+The firmware with specific version has tag in a git repository which contains modified configuration set to exact
+commit of all dependent repositories. The tag can be checked out for specific firmware version and then called *build*
+command for reproducible firmware release.
+
+### Signing
+
+By default the resulting firmware image and packages are signed by a test key which is specified in the default config
+by a *build.key* attribute and is store in a *keys* directory. The release key is usually stored in a fortified keyring
+and is securely used during actual release.
+
+To set this key without changing the configuration file it is possible to use a *key* parameter of the *build* command:
+
+```bash
+# use secret key for signing (the public key is '/path/secret.pub')
+$ ./bb.py build --key /path/secret
+
+# secret and public key can be specified in one parameter
+$ ./bb.py build --key /path/secret:/path/public
+```
 
 ## Development
 
-Default configuration for development has disabled automatic fetching/merging of remote repositories when *build*
+### Fetching
+
+Default configuration on master branch has disabled automatic fetching/merging of remote repositories when *build*
 command is executed. The *prepare* command can be used instead when synchronization with remote is needed.
 
-```commandline
+```bash
 # force fetching from remote repositories
-$ ./lede.py prepare --fetch
+$ ./bb.py prepare --fetch
 ```
 
-It is possible to clean all project with two options. Simple execution of *clean* command use LEDE *make clean* to clean
-the whole build system. It does not guarantee that all files will be in its initial state. The second option use git
-command to clean all repositories and after that run initialization phase again. This option removes all untracked files
-and must be called with caution!
+### Cleaning
 
-```commandline
-# clean repositories with LEDE make clean
-$ ./lede.py clean
+It is possible to clean all projects with two options. Simple execution of *clean* command use the LEDE *make clean* to
+clean the whole build system. It does not guarantee that all files will be in its initial state.
 
-# clean repositories with git clean
-$ ./lede.py clean --purge
+The second option use git command to clean all repositories. The command after clean also runs initialization phase
+again and prepare repository for its first build. This option removes all untracked files and must be called with
+caution!
+
+```bash
+# clean repositories with the LEDE make clean
+$ ./bb.py clean
+
+# reset repositories with git clean
+$ ./bb.py clean --purge
 ```
+
+### Status
 
 The whole miner project consists of several git repositories and during development is convenient to track status of all
-changes in all repositories at once. For this purpose can be used command *status* which is similar to git status but
+changes in all repositories at once. It can be used command *status* for this purpose which is similar to git status but
 it is executed on all repositories.
 
-```commandline
+```bash
 # get status of all repositories
-$ ./lede.py status
+$ ./bb.py status
 ```
 
-Rather than executing the whole LEDE build system which can be slow, standard *make* of developed
-subproject (e.g. CGMiner) can be used with LEDE toolchain. Environment variables must be set correctly for use LEDE toolchain in
+### Out-of-Tree Build
+
+Rather than executing the whole LEDE build system which can be slow, standard *make* of developed subproject (e.g.
+CGMiner) can be used with the LEDE toolchain. Environment variables must be set correctly for use the LEDE toolchain in
 out-of-tree projects. For this purpose, the *toolchain* command is provided.
 
-```commandline
+```bash
 # set environment variables for LEDE toochain out-of-tree use
-$ eval $(./lede.py toolchain 2>/dev/null)
+$ eval $(./bb.py toolchain 2>/dev/null)
 ```
 
-We use standard LEDE menuconfig for firmware image configuration. When some changes are detected then configuration
-difference is saved to the file specified in *YAML* configuration file under *build.config* attribute. It is also
-possible to configure Linux kernel. However, the configuration changes are then saved in LEDE build system in target directory.
+## Configuration
 
-```commandline
-# configure miner firmware
-$ ./lede.py config
+The braiins build system supports multiple configurations specified by a configuration file stored in a YAML format. The
+current configuration can be changed from a command line. From the command line, it is also possible to altered the most
+important parameters without modification underlying file.
 
-# configure Linux kernel
-$ ./lede.py config --kernel
+The configuration is divided into two categories. The first one is target specific configuration which is handled
+exclusively by the braiins build system and can be adjusted only in the YAML configuration. The second one is a package
+configuration used for image content description which is handled mainly in the LEDE menuconfig.
+
+### YAML Structure
+
+The main configuration file is stored in a standard [YAML 1.2][1] format. The format expects predefined hierarchical
+structure which is formed by categories on the global level. The categories can be further divided into subcategories or
+they can directly contain configuration attributes.
+
+The string attributes can use special syntax for parameter expansion which is extension of standard YAML format. The
+name of parameter for expansion is enclosed in *{}* and can be used anytime in the string. The list of supported
+parameters is following:
+
+* *platform* - the name defined in a *miner.platform* attribute (it has form *\<target\>-\<subtarget\>*)
+* *target* - the name of target architecture (e.g. *zynq*)
+* *subtarget* - the name of target device (e.g. *dm1-g19*)
+
+The curly bracket is also used by the YAML for dictionary in an abbreviated form and when string starts with the curly
+bracket then it must be quoted to distinguish meaning:
+
+```yaml
+# use quotes when string starts with { 
+name: '{target}'
+
+# form without quotes when it is not ambiguous
+sd: output/{platform}/sd/
 ```
 
-Miner build system supports multiple configurations which can be selected by global parameter *--config*. When script is
-run without this parameter then **configs/default.yml** is used.
+The default configuration file is fully commented so the following list of global categories is only short description:
 
-## Debugging
+* *miner* - the settings concerning one instance of miner (platform, MAC, HWID, default pool); default configuration is
+  used only for testing and is usually overridden from command line during deployment process
+* *build* - the configuration of build process (path to LEDE configuration, build directories, keys, ...)
+* *remote* - the list of all remote repositories with parameters for fetching; the parameters *fetch* and *branch* used as
+  a default value for all repositories could be overridden in a specific repository by parameter of the same name
+* *local* - the configuration of output directories for local targets for deployment
+* *feeds* - the settings of feeds fetching and installation
+* *uenv* - the configuration of *uEnv.txt* content (this file is used only for SD images)
+* *deploy* - the list of targets for deployment and configuration of this process (e.g. reset of target environment,
+  remote ssh connection, ...)
 
+### CLI Parameters
+
+The braiins build system supports multiple configurations which can be selected by global parameter *--config*. When the
+script is run without this parameter then **configs/default.yml** is used. For changing default target platform, it can
+be used parameter *--platform* with name of supported target.
+
+*Global configuration parameters must be consistently used with all commands to guarantee predictable results!*
+
+The build system supports command which are deeply described in a separate sections. The list of commands are following:
+
+* *prepare* - fetch all remote repositories and prepare source directory
+* *clean* - clean source directory
+* *config* - change default configuration of LEDE project
+* *build* - build image for current configuration
+* *deploy* - deploy selected image to target device (NAND/SD over ssh or to local directory)
+* *status* - show status of all local repositories (*git status* equivalent)
+* *toolchain* - set environment for LEDE toolchain (out-of-tree build)
+* *release* - create branch with configuration for release version
+* *key* - generate build key pair for signing firmware tarball and packages
+
+### Packages
+
+It is used standard LEDE menuconfig for firmware image configuration. When some changes are detected then configuration
+difference is saved to the file specified in *YAML* configuration file under *build.config* attribute.
+
+```bash
+# configure image packages
+$ ./bb.py config
+```
+
+It is build several images at one (NAND, NAND Recovery, SD, ...) and it must be specified to which image is a package
+installed. It is done by two ways. When a package is installed to all images without exception then only LEDE menuconfig
+is used where the package must be selected by asterisk symbol `<*>`. When a package is installed only to specific images
+then the package must be selected as a module `<M>` and add to an external package list specified in a *build.packages*
+attribute.
+
+The package file is just another YAML structured format where are stored lists with inheritance support. The lists with
+*image_* prefix are used for description of installed packages on specified image:
+
+* *image_sd* - SD image with extroot support (second partition in the ext4 format is used as an overlay)
+* *image_nand* - standard NAND image
+* *image_recovery* - special NAND recovery image (it support also factory reset)
+* *image_upgrade* - NAND image for generic stage1 upgrade process from different firmwares
+
+The structured list has the following format:
+
+```yaml
+list_name:
+  # inheritance is specified as a list of base lists
+  # root list has this parameter omitted
+  base:
+    - child1
+    - child2
+  # the list items are specified under separate parameter
+  # the resulting list is merged with base lists in order:
+  # child1.list, child2.list, item1, item2
+  list:
+    - item1
+    - item2
+```
+
+### Kernel
+
+The command *config* can be used also for the Linux configuration when *--kernel* parameter is specified. The resulting
+configuration is then saved in the LEDE build system in the target directory. It is standard behaviour of the LEDE.
+
+```bash
+# configure kernel (Linux) for selected target
+$ ./bb.py config --kernel
+```
 
 ## Deployment
 
+Whenever firmware images are built by the LEDE build system, it is possible to deploy them over ssh connection directly
+to the running miner (when it runs compatible firmware) or store it to a local path. The default configuration runs all
+local targets and stores its result to predefined location **output**/*\<platform\>*. It is convenient for testing when
+we want to verify all possible targets but for real deployment it is more useful to specify target from the command
+line.
+
+### System Upgrade vs. Deployment
+
+*Do not confuse deployment process with the system upgrade!* The deployment is used mainly for developers for testing
+the firmware on running miner or for initial factory NAND programming. For system upgrade use standard firmware tarball
+which can be loaded with help of web interface or with LEDE *sysupgrade* utility.
+
+If you use standard braiins image than following commands can be used for upgrading to the latest firmware:
+
+```bash
+# download latest packages from feeds server
+$ opkg update
+# try to upgrade to the latest firmware
+$ opkg install firmware
+```
+
+### Remote Targets
+
+There will be described only commonly used remote targets but special targets useful during development of specific
+firmware parts will be omitted. With remote targets, it is possible to deploy either NAND image or SD image (in case
+that the SD card is inserted into the SD slot). The NAND image can be deployed even if the miner is run from NAND and a
+UBI partition is mounted. The following targets are supported:
+
+* *sd* - writes U-Boot and Linux image with a *SquashFS* root file system to the SD card
+* *nand* - writes U-Boot and UBI image with the Linux kernel and a *SquashFS* root file system to the NAND (the writable
+  overlay uses a *UBIFS* file system)
+
+Let's assume local network with one miner running braiins/LEDE firmware and default configuration of the build system.
+Then following command can be used for deployment of SD or NAND image to this miner:
+
+```bash
+# mount mmc0 partition 1 and copy all images and 'uEnv.txt' to it
+$ ./bb.py deploy sd
+
+# write U-Boot, recovery image and configuration to NAND and do factory reset
+$ ./bb.py deploy nand
+``` 
+
+When it is needed to manage more then one miner then several arguments can be used to specify remote miner. It can be
+done only by miner MAC address specification or even with a hostname when local DNS served does not work correctly or
+when the MAC address does not correspond with the hostname.
+
+*But be very cautious with MAC address!* Even if parameter *--mac* is omitted the default MAC address from configuration
+file is used (`00:0A:35:FF:FF:FF`) and remote miner is upgraded with it. Because of it, it is recommended use hostname
+only in situations when miners MAC address needs to be changed.
+
+The miners hostname is determined from MAC address when not specified. The miner generates its name based on current MAC
+in a form of `miner-xxyyzz` where `xxyyzz` are last three numbers from this address.
+
+```bash
+# upgrade remote miner with the hostname 'miner-ffff01'
+$ ./bb.py deploy nand --mac 00:0A:35:FF:FF:01
+# upgrade remote miner on address '192.168.0.1' and change its MAC to '00:0A:35:FF:FF:FF'
+$ ./bb.py deploy nand --hostname 192.168.0.1
+# upgrade previous miner and set its MAC to original value
+$ ./bb.py deploy nand --mac 00:0A:35:FF:FF:01 --hostname miner-ffffff
+```
+
+There also exists special configuration sub-targets which modify only miner configuration and do not touch other pars of
+the NAND or SD partiton:
+
+* *sd_config* - modify only *uEnv.txt* file on SD card which is read by the U-Boot
+* *nand_config* - modify only NAND U-Boot environment and miner configuration partition
+
+### Local Targets
+
+For deploying images to locations specified by a file path, the local targets can be used. The default configuration
+enables all local targets for storing all images to a predefined directory **output**/*\<platform\>*. There are also
+special local targets for deployment utilities used for upgrading the original firmware to the braiins/LEDE one. The
+other special target is for a feeds server preparation used for upgrading braiins/LEDE firmware with a standard LEDE
+*opkg* utility. The following list specifies main local targets:
+
+* *local_sd* - the same function as remote target but target is specified by a local file path
+* *local_sd_recovery* - writes special SD recovery image to a local file path (it can be used for bricked miner
+  repairment)
+* *local_nand_dm_v1* - scripts and images needed for upgrading an original DragonMint firmware
+* *local_nand_dm_v2* - scripts and images needed for upgrading an improved DragonMint firmware (Kolivas)
+* *local_feeds* - sysupgrade tarball with current firmware and packages needed for creating standard LEDE feeds server
+
+Similarly to the remote targets there also exists *configuration* targets:
+
+* *local_sd_config* - modify only *uEnv.txt* file (useful for changing parameter *sd_boot*)
+* *local_sd_recovery_config* - modify only *uEnv.txt* file (useful for changing parameters *sd_boot*, *factory_reset*
+  and *sd_images* controlling SD recovery image for factory reset)
+
+Usually command line is used for specification of output location. Because more then one target can by specified at once
+there are special notation for passing local file path to the specific local target:
+
+```
+<local_target>[:<path>]
+```
+
+There can be also specified a miner MAC address with parameter *--mac* but it is used only for generation of *uEnv.txt*
+and this MAC address is used after booting miner from this SD card. The parameter *--hostname* is ignored for local
+targets. But there exists several parameters useful for miner configuration which will be described in the next section.
+
+There follows typical examples of *deploy* command for local targets:
+
+```bash
+# create SD card with default MAC address without SD boot parameter
+# a hardware jumper on controll board have to be connected to boot from this SD card
+$ ./bb.py deploy local_sd:/mnt/mmc0
+
+# create SD card with MAC address '00:0A:35:FF:FF:01' and with SD boot enabled
+# it can boot from SD card without connecting a hardware jumper if compatible U-Boot is used
+$ ./bb.py deploy local_sd:/mnt/mmc0 --mac 00:0A:35:FF:FF:01 --uenv sd_boot
+
+# create recovery SD card which boot from SD and do NAND factory reset using images stored on this SD 
+$ ./bb.py deploy local_sd_recovery:/mnt/mmc0 --mac 00:0A:35:FF:FF:01 --uenv sd_boot factory_reset sd_images
+
+# create special SD card only with 'uEnv.txt' which do factory reset when it is inserted in a miner
+$ ./bb.py deploy local_sd_config:/mnt/mmc0 --uenv factory_reset
+```
+
+### uEnv
+
+When the U-Boot finds inserted SD card it tries to load a file *uEnv.txt* from its first partition formatted with FAT
+file system. There are stored environment variables which can alter U-Boot behaviour during boot process. There exists
+standard U-Boot variables (e.g. ethaddr) and some are provided by braiins/LEDE firmware. Configuration of these
+variables can be done in the braiins build system YAML file in *uenv* section. These parameters can be also passed by
+command line argument *--uenv*. The following list shows all supported settings:
+
+* *mac* - set miner MAC address (generates *ethaddr* variable)
+* *factory_reset* - when SD has enabled this variable and is inserted to a miner then miner do factory reset
+* *sd_images* - use for factory reset images from SD (it must be enabled also *factory_reset*)
+* *sd_boot* - boot kernel image from SD (the U-Boot is still booted from the NAND)
+
+The *sd_boot* requires compatible and functional U-Boot on NAND. When the NAND is corrupted then it may not work and a
+HW jumper must be used for a miner control board reconfiguration. There must be connected *J2* pins to change boot mode
+to SD card.
+
+### Default Pool
+
+Each miner with the same firmware can store different default pool. The information is stored in a miner configuration
+partition in the NAND. For SD version this functionality is not currently supported. The default pool can be changed
+from command line with corresponding arguments of deploy command. However, these arguments have effect only for remote
+targets and for special local targets for an original firmware upgrade. The deploy command supports the following
+arguments:
+
+* *pool-url* - the address of pool server in a format *\<host\>[:\<port\>]*<br>
+  (*stratum+tcp://stratum.slushpool.com:3333*)
+* *pool-user* - the name of user and worker<br>
+  (*braiinstest.worker1*)
+
+## Release Management
+
+The braiins build system has also tools for firmware versioning which is usually used in release cycles. It is based on
+git repository with tags which holds name of a firmware version and configuration for reproducible firmware build. The
+release cycle has three stages:
+
+1. new version creation,
+2. signed firmware building,
+3. publication.
+
+### Versioning
+
+The first stage is about git branch creation, modification of default configuration file where each repository points to
+specific commit and tag creation with a name representing current firmware version. All this can be done by one command
+with a name *release*. This command requires that the braiins build system repository and all dependent repositories are
+clean. After successful call of this command, a *remote* tag is created with the following version format:
+
+```
+firmware_<YYYY-MM-DD>-<patch_level>-<short_sha>
+```
+
+The `<YYYY-MM-DD>` represents a *date* of the brains build system *commit* from which is a release created. The value of
+the `<patch_level>` is usually 0 and is incremented only in situation when more then one release is created in one day.
+This incrementation is done automatically and depends on correctly created git tags. The `<short_sha>` is a SHA prefix
+of the *commit* used for the date. The prefix is 8 characters long.
+
+The *release* command has also *--include* argument which is used for specification of a firmware tarball content. In a
+special situation that a new firmware needs to upgrade also a U-Boot or a FPGA bitstream. Occasionally there can be also
+added bash script (*COMMAND*) which is run before in pre-init phase of the standard system upgrade process. There can be
+some control checks or fixes of previous firmware running on a miner. The source code of this script is stored in the
+LEDE repository but must be configured externally that it is included to the output image. The following list contains
+all sysupgrade components supported by the firmware:
+
+* *command* - bash script executed during firmware system upgrade
+* *uboot* - the U-Boot image for upgrading previous one (it can brick the miner)
+* *fpga* - the FPGA bitstream (the miner has auto recovery precess which can rescue a miner when the new bitstream does
+  not work)
+
+```bash
+# create git tag and push it to the remote repository
+$ ./bb.py release
+
+# do the same but also include 'COMMAND' script and new FPGA bitstream
+$ ./bb.py release --include command fpga
+```
+
+### Building and Signing 
+
+The official firmware is signed with publisher key which should be private. There should exist only one key stored in
+some fortified keyring. The key can be generated by the braiins build system with the following command:
+
+```bash
+# generate key pair and store it to the fortified keyring
+$ ./bb.py key ~/keyring/secret
+```
+
+This command generates private and public key into the specified path. Where is private key securely stored is beyond
+the scope of this description. This key is usually generated only once and is used for signing of all lately released
+firmwares.
+
+When release has been created with the *release* command then it can be build and signed wit the following command:
+
+```bash
+# switch braiins build system to specific firmware version
+$ git checkout firmware_2018-05-27-0-16a21b55
+# build this version and sign it with a secret key
+$ ./bb.py build --key ~/keyring/secret
+```
+
+If everything goes well then all images are prepared for final publication to the feeds server. This process can be
+reproduce anytime in the feature.
+
+### Feeds Server
+
+The final stage of release management is publication to the feeds server. It is standard LEDE feeds server with the
+*Packages.gz* file containing list of *ipk* packages in a text format. All files needed for this feed server can be
+created by *deploy* command with *local_feeds* target:
+
+```bash
+# initial feeds server is created by deploy command with 'local_feeds' target
+$ ./bb.py deploy local_feeds:~/server/initial_feeds
+
+# the other deployments should be created with the previous contents
+$ ./bb.py deploy local_feeds:~/server/new_feeds --feeds-base ~/server/initial_feeds/Packages
+```
+
+The output directory shout be empty before calling deploy command to ensure that the directory would not contain any
+temporary files. If feeds server contain previous firmwares too then *--feeds-base* should be called to merge previous
+*Packages* index file with new firmware. The previous *Packages* index file can be also edited before new deployment to
+prune some old firmwares from the server.
+
+All generated files are described in the following list:
+
+* **firmware_\<version\>.tar** - signed tarball with all images for miner system upgrade compatible with *sysupgrade*
+  utility or LuCI web interface (this file can be used directly without *OPKG* utility)
+* **firmware_\<version\>.ipk** - standard *OPKG* package with firmware metadata used for installing new firmware<br>
+  (it downloads correspondent *firmware_\<version\>.tar* from feeds server and initiate system upgrade)
+* **Packages** - feeds index file with a list of all packages in a text form<br>
+  (it contains references to *firmware_\<version\>.tar*)
+* **Packages.gz** - gzipped *Packages* file
+* **Packages.sig** - the file with a sign of *Packages.gz*
+
+## Upgrade from Original Firmware
+
+A DragonMint miner with the original firmware can be upgraded with the following commands:
+
+```bash
+# create stage1 upgrade script and all required images for new DragonMint with G19 controll board
+$ ./bb.py deploy local_nand_dm_v2:~/nand_dm_v2
+
+# run generated upgrade script from local host and initiate stage1 upgrade over ssh connection
+$ cd ~/nand_dm_v2
+$ python3 ./upgrade.py 192.168.0.1
+
+# connect to newly upgraded miner and run final stage2 upgrade
+$ ssh root@192.168.0.1
+$ miner_upgrade.sh
+```
+
+There exists two versions of original firmware and appropriate target for deploy should be used:
+
+* *local_nand_dm_v1* - first version of firmware which running only *telnet* server
+* *local_nand_dm_v2* - improved version which uses *ssh* server instead
+
+You have to get login information for *root* access over *telnet* (v1) or *ssh* (v2) for your DragonMint miner before
+you start the upgrade process. Without this information you have to open your miner and use SD version for boot and
+deploy this firmware with the braiins build *deploy* command with *nand* target.
 
 ## Authors
 
 * **Libor Vašíček** - *Initial work*
 
-
 ## License
+
+[1]: http://yaml.org/spec/1.2/spec.html
