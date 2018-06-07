@@ -104,6 +104,9 @@ class CommandManager:
         uenv = self._config.uenv
         for option in set(self._args.uenv or []):
             setattr(uenv, option, 'yes')
+        # set feeds base index file
+        if self._args.feeds_base:
+            self._config.deploy.feeds_base = self._args.feeds_base
 
         # override default targets from command line
         if self._args.target:
@@ -226,6 +229,9 @@ def main(argv):
                            help='name of pool worker')
     subparser.add_argument('--uenv', choices=['mac', 'factory_reset', 'sd_images', 'sd_boot'], nargs='*',
                            help='enable some options in uEnv.txt for SD images')
+    subparser.add_argument('--feeds-base', nargs='?',
+                           help='path to the Packages file for concatenation with new feeds index '
+                                '(for local_feeds target only)')
     subparser.add_argument('target', nargs='*',
                            help='list of targets for deployment (local target can specify also output directory '
                                 'in a format <target>[:<path>])')
