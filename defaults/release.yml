@@ -1,70 +1,70 @@
 # common lists
 core:
-    list:
-        - cgminer
-        - cgminer_monitor
-        - gdbserver
-        - ip6tables
-        - iptables
-        - kmod-ip6tables
-        - kmod-lib-crc-ccitt
-        - kmod-nf-conntrack6
-        - kmod-nf-ipt6
-        - libcurl
-        - libiwinfo
-        - libiwinfo-lua
-        - liblua
-        - libmbedtls
-        - libpcap
-        - libubus-lua
-        - libuci-lua
-        - libuclient
-        - lua
-        - lua-cjson
-        - luasocket
-        - luci-app-cgminer
-        - luci-base
-        - luci-lib-ip
-        - luci-lib-jsonc
-        - luci-lib-nixio
-        - luci-mod-admin-full
-        - luci-proto-ipv6
-        - luci-theme-miner
-        - opkg
-        - rpcd
-        - strace
-        - tcpdump
-        - uclient-fetch
-        - uhttpd
-        - uhttpd-mod-ubus
+  list:
+    - cgminer
+    - cgminer_monitor
+    - gdbserver
+    - ip6tables
+    - iptables
+    - kmod-ip6tables
+    - kmod-lib-crc-ccitt
+    - kmod-nf-conntrack6
+    - kmod-nf-ipt6
+    - libcurl
+    - libiwinfo
+    - libiwinfo-lua
+    - liblua
+    - libmbedtls
+    - libpcap
+    - libubus-lua
+    - libuci-lua
+    - libuclient
+    - lua
+    - lua-cjson
+    - luasocket
+    - luci-app-cgminer
+    - luci-base
+    - luci-lib-ip
+    - luci-lib-jsonc
+    - luci-lib-nixio
+    - luci-mod-admin-full
+    - luci-proto-ipv6
+    - luci-theme-miner
+    - opkg
+    - rpcd
+    - strace
+    - tcpdump
+    - uclient-fetch
+    - uhttpd
+    - uhttpd-mod-ubus
 
 block_mount:
-    list:
-        - block-mount
-        - miner-extroot
-        - e2fsprogs
-        - libext2fs
-        - libuuid
+  list:
+    - block-mount
+    - miner-extroot
+    - e2fsprogs
+    - libext2fs
+    - libuuid
 
 # image package lists
 image_sd:
-    base:
-        - core
-        - block_mount
+  base:
+    - core
+    - block_mount
 
 image_nand:
-    base:
-        - core
-    list:
-        - firmware
+  base:
+    - core
+  list:
+    - firmware
 
 image_recovery:
-    list:
-        - miner_recovery
+  list:
+    - miner_recovery
 
 image_upgrade:
-    base:
-        - core
-        - block_mount
-    list:
-        - miner_upgrade
+  base:
+    - core
+    - block_mount
+  list:
+    - miner_upgrade
