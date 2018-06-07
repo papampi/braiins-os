@@ -4,6 +4,7 @@ import logging
 from contextlib import contextmanager
 from subprocess import CalledProcessError
 from collections import namedtuple
+from getpass import getpass
 
 
 class SSHClient(paramiko.SSHClient):
@@ -37,9 +38,9 @@ class SSHManager:
             A password to use for authentication.
         """
         self._client = SSHClient()
-        self._hostname = hostname
-        self._username = username
-        self._password = password
+        self._hostname = str(hostname)
+        self._username = str(username)
+        self._password = str(password)
 
         logging.debug("Loading system host keys...'")
         self._client.load_system_host_keys()
@@ -53,9 +54,32 @@ class SSHManager:
             SSH manager connected to the server.
         """
         logging.debug("Connecting to remote SSH server...'")
-        self._client.connect(hostname=self._hostname, username=self._username, password=self._password,
-                             look_for_keys=False)
-        return self
+        # at first try to login with ssh key
+        try:
+            self._client.connect(hostname=self._hostname, username=self._username, look_for_keys=True)
+        except paramiko.AuthenticationException:
+            pass
+        else:
+            return self
+        # then try to login without password
+        try:
+            self._client.connect(hostname=self._hostname, username=self._username, password=None, look_for_keys=False)
+        except paramiko.BadAuthenticationType:
+            pass
+        else:
+            return self
+        # finally use use configured password
+        password = self._password
+        while True:
+            try:
+                self._client.close()
+                self._client.connect(hostname=self._hostname, username=self._username, password=password,
+                                     look_for_keys=False)
+            except paramiko.AuthenticationException:
+                # prompt the user when everything fails
+                password = getpass()
+            else:
+                return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
