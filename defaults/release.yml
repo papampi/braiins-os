@@ -51,15 +51,19 @@ image_sd:
   base:
     - core
     - block_mount
+  list:
+    - miner_tools
 
 image_nand:
   base:
     - core
   list:
+    - miner_tools
     - firmware
 
 image_recovery:
   list:
+    - miner_tools
     - miner_recovery
 
 image_upgrade:
