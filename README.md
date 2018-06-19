@@ -391,9 +391,9 @@ $ ./bb.py deploy local_sd_config:/mnt/mmc0 --uenv factory_reset
 
 ### uEnv
 
-When U-Boot finds inserted SD card it tries to load a file *uEnv.txt* from its first partition formatted with FAT file
-system. There are environment variables which can alter U-Boot behavior during boot process. There are standard U-Boot
-variables (e.g. ethaddr) and some additional ones are provided by braiins/LEDE firmware. Configuration of these
+When U-Boot finds inserted SD card it tries to load a file *uEnv.txt* from its first partition formatted with FAT
+file system. There are environment variables which can alter U-Boot behavior during boot process. There are
+standard U-Boot variables (e.g. ethaddr) and some additional ones are provided by braiins/LEDE firmware. Configuration of these
 variables can be done in the braiins build system YAML file in *uenv* section. These parameters can also be passed by
 command line argument *--uenv*. The following list shows all supported settings:
 
@@ -402,9 +402,9 @@ command line argument *--uenv*. The following list shows all supported settings:
 * *sd_images* - used for factory reset images from SD (*factory_reset* must also be enable)
 * *sd_boot* - boot kernel image from SD (the U-Boot is still booted from the NAND)
 
-The *sd_boot* requires compatible and functional U-Boot on NAND. When the NAND is corrupted it may not work. In that
-case a HW jumper must be used for a miner control board reconfiguration. E.g. *J2* pins must be bridged on G9/G19 boards
-to change boot mode from NAND to SD card.
+The *sd_boot* requires compatible and functional U-Boot on NAND. When the NAND is corrupted it may not work. In
+that case a HW jumper must be used for a miner control board reconfiguration. E.g. *J2* pins must be bridged on
+G9/G19 boards to change boot mode from NAND to SD card.
 
 ### Default Pool
 
@@ -421,8 +421,8 @@ arguments:
 
 ## Release Management
 
-The braiins build system also has tools for firmware versioning which is used in release cycles. It is based on git
-repository with tags which holds name of a firmware version and configuration for reproducible firmware build. The
+The braiins build system also has tools for firmware versioning which is used in release cycles. It is based on
+git repository with tags which holds name of a firmware version and configuration for reproducible firmware build. The
 release cycle has three stages:
 
 1. new version creation,
@@ -440,17 +440,17 @@ clean. After successful call of this command, a *remote* tag is created with the
 firmware_<YYYY-MM-DD>-<patch_level>-<short_sha>
 ```
 
-The `<YYYY-MM-DD>` represents a *date* of the braiins build system *commit* from which is a release created. The value
-of the `<patch_level>` is usually 0 and is incremented only in situation when more then one release is created in one
-day. This increment is done automatically and depends on correctly created git tags. The `<short_sha>` is a SHA prefix
+The `<YYYY-MM-DD>` represents a *date* of the braiins build system *commit* from which is a release created. The value of
+the `<patch_level>` is usually 0 and is incremented only in situation when more then one release is created in one day.
+This increment is done automatically and depends on correctly created git tags. The `<short_sha>` is a SHA prefix
 of the *commit* used for the date. The prefix is 8 characters long.
 
-The *release* command has also *--include* argument which is used for specification of a firmware tarball content. In a
-special situation that a new firmware needs to upgrade also a U-Boot or a FPGA bitstream. Occasionally, a bash script
-(*COMMAND*) can also be added. It is run before in pre-init phase of the standard system upgrade process. It can contain
-some control checks or fixes of previous firmware running on a miner. The source code of this script is stored in the
-LEDE repository but must be configured externally that it is included to the output image. The following list contains
-all sysupgrade components supported by the firmware:
+The *release* command has also *--include* argument which is used for specification of a firmware tarball
+content. In a special situation that a new firmware needs to upgrade also a U-Boot or a FPGA
+bitstream. Occasionally, a bash script (*COMMAND*) can also be added. It is run before in pre-init phase of the
+standard system upgrade process. It can contain some control checks or fixes of previous firmware running on a
+miner. The source code of this script is stored in the LEDE repository but must be configured externally that it is
+included to the output image. The following list contains all sysupgrade components supported by the firmware:
 
 * *command* - bash script executed during firmware system upgrade
 * *uboot* - the U-Boot image for upgrading previous one (it can brick the miner)
@@ -467,17 +467,17 @@ $ ./bb.py release --include command fpga
 
 ### Building and Signing 
 
-The official firmware is signed with publisher key which should be private. Only one key should exist and be stored in
-some secured keyring. The key can be generated by the braiins build system with the following command:
+The official firmware is signed with publisher key which should be private. Only one key should exist and be stored
+in some secured keyring. The key can be generated by the braiins build system with the following command:
 
 ```bash
 # generate key pair and store it to the fortified keyring
 $ ./bb.py key ~/keyring/secret
 ```
 
-This command generates private and public key into the specified path. Where the private key is to be securely stored is
-beyond the scope of this description. This key is usually generated only once and is used for signing of all the
-releases firmwares.
+This command generates private and public key into the specified path. Where the private key is to be securely
+stored is beyond the scope of this description. This key is usually generated only once and is used for signing of
+all the releases firmwares.
 
 After the release has been created with the *release* command, it can be built and signed with the following command:
 

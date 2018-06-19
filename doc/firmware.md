@@ -38,14 +38,14 @@ Default script supports following features:
 
 ### fpga
 
-An FPGA bitstream partition which contains the programming information for an FPGA. There are actually two partitions.
-Only one partition is active. This partition always contains functional version of bitstream and is used during auto
+This partition contains the programming information (bitstream) for an FPGA. There are actually two partitions.
+Only one partition is active at a time. This partition always contains the latest released version of bitstream and is used during auto
 recovery process.
 
 ### uboot_env
 
-A partition with the U-Boot redundant environment. This configuration use two environments. When the second environment
-is corrupted then the U-Boot tries to recover data from the first one. A Linux U-Boot firmware tools (*fw_printenv*,
+This partition contains U-Boot redundant environment. This configuration uses two environments. When the second environment
+gets corrupted, U-Boot tries to recover data from the first one. Linux U-Boot firmware tools (*fw_printenv*,
 *fw_setenv*) have to be configured in *fw_env.config* as follows:
 
 ```
@@ -56,21 +56,21 @@ is corrupted then the U-Boot tries to recover data from the first one. A Linux U
 
 ### miner_cfg
 
-This partition use U-Boot environment for storing unique information about miner and is written only once during factory
-programming or initial upgrade from original firmware. The data are stored also in redundant environment format because
-the U-Boot can be configured only for one format but it does not use second data storage. The environment has stored
-following information:
+This partition uses U-Boot environment for storing unique information about miner and is written only once during factory
+programming or initial upgrade from original firmware. The data is also stored in redundant environment format because
+U-Boot can be configured only for one format. However, it does not use the second data storage. The environment stores
+the following information:
 
 * MAC address,
 * miner HWID,
 * default pool settings.
 
-These data are used during factory reset to restore initial configuration.
+This data are used during factory reset to restore the initial configuration.
 
 ### recovery
 
-This partition should be read only and is created during factory programming or initial upgrade from original firmware.
-When U-Boot is not corrupted then this partition can be used for miner recovery. The recovery image is logically divided
+This is read-only partition. It is created during factory programming or initial upgrade from original firmware.
+When U-Boot is not corrupted this partition can be used for miner recovery. The recovery image is logically divided
 to three partitions:
 
 | Address               | Size       | Name      |
