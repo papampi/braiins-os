@@ -143,7 +143,7 @@ CGMiner) with the LEDE toolchain. Environment variables must be set correctly fo
 out-of-tree projects. For this purpose, the *toolchain* command is provided.
 
 ```bash
-# set environment variables for LEDE toochain out-of-tree use
+# set environment variables for LEDE toolchain out-of-tree use
 $ eval $(./bb.py toolchain 2>/dev/null)
 ```
 
@@ -261,7 +261,7 @@ list_name:
 ### Kernel
 
 The *config* command can also be used for the Linux configuration when *--kernel* parameter is specified. The resulting
-configuration is then saved in the LEDE build system in the target directory. It is standard behaviour of the LEDE.
+configuration is then saved in the LEDE build system in the target directory. It is standard behavior of the LEDE.
 
 ```bash
 # configure kernel (Linux) for selected target
@@ -348,8 +348,8 @@ other special target is for a feeds server preparation used for upgrading braiin
 *opkg* utility. The following list specifies main local targets:
 
 * *local_sd* - the same function as remote target but target is specified by a local file path
-* *local_sd_recovery* - writes special SD recovery image to a local file path (it can be used for bricked miner
-  repairment)
+* *local_sd_recovery* - writes special SD recovery image to a local file path (it can be used for repairing a
+  'bricked' miner)
 * *local_nand_dm_v1* - scripts and images needed for upgrading an original DragonMint firmware
 * *local_nand_dm_v2* - scripts and images needed for upgrading an improved DragonMint firmware (Kolivas)
 * *local_feeds* - sysupgrade tarball with current firmware and packages needed for creating standard LEDE feeds server
@@ -367,15 +367,15 @@ there is special notation for passing local file path to the specific local targ
 <local_target>[:<path>]
 ```
 
-Miner MAC address can be also specified a with parameter *--mac* but it is used only for generation of *uEnv.txt*
-and this MAC address is used when booting the miner from this SD card. The parameter *--hostname* is ignored for local
-targets. There are several parameters useful for miner configuration which will be described in the next section.
+Miner MAC address can also be specified with *--mac* parameter. However, it is only used for generating the *uEnv.txt*.
+This MAC address is used when booting the miner from an SD card. The *--hostname* parameter is ignored for local
+targets. There are several useful parameters for miner configuration which will be described in the next section.
 
 Below are a few typical examples of *deploy* command for local targets:
 
 ```bash
 # create SD card with default MAC address without SD boot parameter
-# a hardware jumper on controll board have to be connected to boot from this SD card
+# a hardware jumper on control board have to be connected to boot from this SD card
 $ ./bb.py deploy local_sd:/mnt/mmc0
 
 # create SD card with MAC address '00:0A:35:FF:FF:01' and with SD boot enabled
@@ -391,20 +391,20 @@ $ ./bb.py deploy local_sd_config:/mnt/mmc0 --uenv factory_reset
 
 ### uEnv
 
-When the U-Boot finds inserted SD card it tries to load a file *uEnv.txt* from its first partition formatted with FAT
-file system. There are environment variables which can alter U-Boot behaviour during boot process. There are
+When U-Boot finds inserted SD card it tries to load a file *uEnv.txt* from its first partition formatted with FAT
+file system. There are environment variables which can alter U-Boot behavior during boot process. There are
 standard U-Boot variables (e.g. ethaddr) and some additional ones are provided by braiins/LEDE firmware. Configuration of these
 variables can be done in the braiins build system YAML file in *uenv* section. These parameters can also be passed by
 command line argument *--uenv*. The following list shows all supported settings:
 
 * *mac* - set miner MAC address (generates *ethaddr* variable)
 * *factory_reset* - when SD has this variable enabled and is inserted into the miner, the miner performs factory reset
-* *sd_images* - used for factory reset images from SD (*factory_reset* must also be enabled )
+* *sd_images* - used for factory reset images from SD (*factory_reset* must also be enable)
 * *sd_boot* - boot kernel image from SD (the U-Boot is still booted from the NAND)
 
 The *sd_boot* requires compatible and functional U-Boot on NAND. When the NAND is corrupted it may not work. In
-that case a HW jumper must be used for a miner control board reconfiguration. The *J2* pins must be bridged on
-G9/G19 boards to change boot mode to SD card.
+that case a HW jumper must be used for a miner control board reconfiguration. E.g. *J2* pins must be bridged on
+G9/G19 boards to change boot mode from NAND to SD card.
 
 ### Default Pool
 
@@ -421,7 +421,7 @@ arguments:
 
 ## Release Management
 
-The braiins build system has also tools for firmware versioning which is used in release cycles. It is based on
+The braiins build system also has tools for firmware versioning which is used in release cycles. It is based on
 git repository with tags which holds name of a firmware version and configuration for reproducible firmware build. The
 release cycle has three stages:
 
@@ -440,21 +440,21 @@ clean. After successful call of this command, a *remote* tag is created with the
 firmware_<YYYY-MM-DD>-<patch_level>-<short_sha>
 ```
 
-The `<YYYY-MM-DD>` represents a *date* of the brains build system *commit* from which is a release created. The value of
+The `<YYYY-MM-DD>` represents a *date* of the braiins build system *commit* from which is a release created. The value of
 the `<patch_level>` is usually 0 and is incremented only in situation when more then one release is created in one day.
-This incrementation is done automatically and depends on correctly created git tags. The `<short_sha>` is a SHA prefix
+This increment is done automatically and depends on correctly created git tags. The `<short_sha>` is a SHA prefix
 of the *commit* used for the date. The prefix is 8 characters long.
 
-The *release* command has also *--include* argument which is used for specification of a firmware tarball content. In a
-special situation that a new firmware needs to upgrade also a U-Boot or a FPGA bitstream. Occasionally there can be also
-added bash script (*COMMAND*) which is run before in pre-init phase of the standard system upgrade process. There can be
-some control checks or fixes of previous firmware running on a miner. The source code of this script is stored in the
-LEDE repository but must be configured externally that it is included to the output image. The following list contains
-all sysupgrade components supported by the firmware:
+The *release* command has also *--include* argument which is used for specification of a firmware tarball
+content. In a special situation that a new firmware needs to upgrade also a U-Boot or a FPGA
+bitstream. Occasionally, a bash script (*COMMAND*) can also be added. It is run before in pre-init phase of the
+standard system upgrade process. It can contain some control checks or fixes of previous firmware running on a
+miner. The source code of this script is stored in the LEDE repository but must be configured externally that it is
+included to the output image. The following list contains all sysupgrade components supported by the firmware:
 
 * *command* - bash script executed during firmware system upgrade
 * *uboot* - the U-Boot image for upgrading previous one (it can brick the miner)
-* *fpga* - the FPGA bitstream (the miner has auto recovery precess which can rescue a miner when the new bitstream does
+* *fpga* - the FPGA bitstream (the miner has auto recovery process which can rescue a miner when the new bitstream does
   not work)
 
 ```bash
@@ -467,19 +467,19 @@ $ ./bb.py release --include command fpga
 
 ### Building and Signing 
 
-The official firmware is signed with publisher key which should be private. There should exist only one key stored in
-some fortified keyring. The key can be generated by the braiins build system with the following command:
+The official firmware is signed with publisher key which should be private. Only one key should exist and be stored
+in some secured keyring. The key can be generated by the braiins build system with the following command:
 
 ```bash
 # generate key pair and store it to the fortified keyring
 $ ./bb.py key ~/keyring/secret
 ```
 
-This command generates private and public key into the specified path. Where is private key securely stored is beyond
-the scope of this description. This key is usually generated only once and is used for signing of all lately released
-firmwares.
+This command generates private and public key into the specified path. Where the private key is to be securely
+stored is beyond the scope of this description. This key is usually generated only once and is used for signing of
+all the releases firmwares.
 
-When release has been created with the *release* command then it can be build and signed wit the following command:
+After the release has been created with the *release* command, it can be built and signed with the following command:
 
 ```bash
 # switch braiins build system to specific firmware version
@@ -488,12 +488,12 @@ $ git checkout firmware_2018-05-27-0-16a21b55
 $ ./bb.py build --key ~/keyring/secret
 ```
 
-If everything goes well then all images are prepared for final publication to the feeds server. This process can be
-reproduce anytime in the feature.
+If everything goes well, all images are prepared for final publishing to the feeds server. This process can be
+reproduced anytime in the feature.
 
 ### Feeds Server
 
-The final stage of release management is publication to the feeds server. It is standard LEDE feeds server with the
+The final stage of release management is publishing to the feeds server. It is standard LEDE feeds server with the
 *Packages.gz* file containing list of *ipk* packages in a text format. All files needed for this feed server can be
 created by *deploy* command with *local_feeds* target:
 
@@ -505,9 +505,9 @@ $ ./bb.py deploy local_feeds:~/server/initial_feeds
 $ ./bb.py deploy local_feeds:~/server/new_feeds --feeds-base ~/server/initial_feeds/Packages
 ```
 
-The output directory shout be empty before calling deploy command to ensure that the directory would not contain any
-temporary files. If feeds server contain previous firmwares too then *--feeds-base* should be called to merge previous
-*Packages* index file with new firmware. The previous *Packages* index file can be also edited before new deployment to
+The output directory should be empty before calling deploy command to ensure that the directory would not contain any
+temporary files. If feeds server contains previous firmwares too the *--feeds-base* should be called to merge previous
+*Packages* index file with new firmware. The previous *Packages* index file can also be edited before new deployment to
 prune some old firmwares from the server.
 
 All generated files are described in the following list:
@@ -526,7 +526,7 @@ All generated files are described in the following list:
 A DragonMint miner with the original firmware can be upgraded with the following commands:
 
 ```bash
-# create stage1 upgrade script and all required images for new DragonMint with G19 controll board
+# create stage1 upgrade script and all required images for new DragonMint with G19 control board
 $ ./bb.py deploy local_nand_dm_v2:~/nand_dm_v2
 
 # run generated upgrade script from local host and initiate stage1 upgrade over ssh connection
