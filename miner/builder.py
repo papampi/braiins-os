@@ -8,12 +8,17 @@ import git
 import io
 import os
 import sys
+import glob
+import filecmp
+
 import miner.hwid as hwid
 
+from itertools import chain
 from collections import OrderedDict, namedtuple
 from termcolor import colored
 from functools import partial
 from datetime import datetime, timezone
+from doit.tools import run_once, config_changed, check_timestamp_unchanged
 
 from miner.config import ListWalker, RemoteWalker, load_config
 from miner.repo import RepoProgressPrinter
@@ -42,25 +47,6 @@ def get_stream_size(stream):
     return stream_size
 
 
-def is_target_latest(src_path: str, dst_path: str) -> bool:
-    """
-    Check if target file is up-to-date with source file
-
-    :param src_path:
-        Path to source file.
-    :param dst_path:
-        Path to destination file.
-    :return:
-        True when destination file exists and its creatin time is not older then source file.
-    """
-    if not os.path.exists(dst_path):
-        # destination file does not exists so source is newer
-        return False
-    src_time = os.path.getmtime(src_path)
-    dst_time = os.path.getmtime(dst_path)
-    return dst_time >= src_time
-
-
 class Builder:
     """
     Main class for building the Miner firmware based on the LEDE (OpenWRT) project.
@@ -87,6 +73,7 @@ class Builder:
     CGMINER = 'cgminer'
     FEEDS_CONF_SRC = 'feeds.conf.default'
     FEEDS_CONF_DST = 'feeds.conf'
+    FEEDS_DIR = 'feeds'
     CONFIG_NAME = '.config'
     BUILD_KEY_NAME = 'key-build'
     BUILD_KEY_PUB_NAME = 'key-build.pub'
@@ -116,7 +103,7 @@ class Builder:
 
     MTD_BITSTREAM = 'fpga'
 
-    DM_VERSIONS=2
+    DM_VERSIONS = 2
     DM_DIR = 'upgrade_dm'
     DM_FIRMWARE_DIR = 'firmware'
     DM_UBOOT_ENV = 'uboot_env.bin'
@@ -237,7 +224,7 @@ class Builder:
         :return:
             Absolute path to external directory.
         """
-        external_dir = self._get_repo(repo_name).working_dir
+        external_dir = self._get_repo_path(repo_name)
         logging.debug("Set external {} tree to '{}'".format(name, external_dir))
         stream.write('{}="{}"\n'.format(config, external_dir))
 
@@ -301,9 +288,24 @@ class Builder:
         self._config.formatter = StrFormatter(self)
         self._argv = argv
         self._build_dir = os.path.join(os.path.abspath(self._config.build.dir), self._config.build.name)
-        self._working_dir = None
+        # set working directory to LEDE root directory
+        self._working_dir = self._get_repo_path(self.LEDE)
         self._repos = OrderedDict()
         self._init_repos()
+
+    @property
+    def build_dir(self):
+        """
+        Return build directory for current configuration
+        """
+        return self._build_dir
+
+    @property
+    def configuration(self):
+        """
+        Return current configuration
+        """
+        return self._config
 
     def _run(self, *args, path=None, input=None, output=False, init=None):
         """
@@ -417,9 +419,8 @@ class Builder:
         :return:
             Pair of absolute paths to default and current configuration file.
         """
-        lede_dir = self._get_repo(self.LEDE).working_dir
         config_src_path = os.path.abspath(self._config.build.config)
-        config_dst_path = os.path.join(lede_dir, self.CONFIG_NAME)
+        config_dst_path = os.path.join(self._working_dir, self.CONFIG_NAME)
         return config_src_path, config_dst_path
 
     def _use_glibc(self):
@@ -485,13 +486,41 @@ class Builder:
         if error:
             raise BuilderStop
 
-    def _prepare_repo(self, remote):
+    def _clone_repo(self, remote):
         """
-        Prepare one remote repository for use
+        Clone repository when it is missing or remote server is changed
 
-        It clones or fetches latest changes from remote repository.
-        The fetch can be altered by user in configuration file or from command line.
-        When current branch differs from specified one it allow switching branches.
+        :param remote:
+            Named tuple with information about remote repository.
+        :return:
+            Generator returning dictionary with dependencies and action for doit task.
+        """
+        name = remote.name
+        path = self._get_repo_path(name)
+
+        yield {
+            'name': name,
+            'uptodate': [self._repos[name] is not None,
+                         config_changed(remote.uri)]
+        }
+
+        shutil.rmtree(path, ignore_errors=True)
+        repo = git.Repo.clone_from(remote.uri, path, progress=RepoProgressPrinter())
+        self._repos[name] = repo
+
+    def clone_repos(self):
+        """
+        Clone all repositories
+
+        :return:
+            List of generators used for doit task.
+        """
+        for remote in RemoteWalker(self._config.remote):
+            yield self._clone_repo(remote)
+
+    def _checkout_repo(self, remote):
+        """
+        Switch branches or pull it from remote repository
 
         :param remote:
             Named tuple where following attributes are used:
@@ -500,142 +529,280 @@ class Builder:
             - `uri` - address of remote git repository
             - `branch` - name of branch
             - `fetch` - if True then fetch+merge is done
+        :return:
+            Generator returning dictionary with dependencies and action for doit task.
         """
         name = remote.name
-        path = self._get_repo_path(name)
-        repo = self._repos[name]
-        is_detached = False
 
-        logging.debug("Start preparing remote '{}' in '{}'".format(name, path))
-        if not repo:
-            logging.info("Cloning remote '{}'".format(name))
-            repo = git.Repo.clone_from(remote.uri, path, branch=remote.branch,
-                                       progress=RepoProgressPrinter())
-            self._repos[name] = repo
-        elif remote.fetch:
-            logging.info("Fetching remote '{}'".format(name))
-            for repo_remote in repo.remotes:
-                repo_remote.fetch()
-        if remote.branch not in repo.heads:
+        def get_reference(repo):
+            """
+            Return reference to local branch or commit when exists otherwise return None
+            """
+            if remote.branch in repo.heads:
+                return repo.heads[remote.branch]
+            try:
+                return repo.commit(remote.branch)
+            except (git.BadName, ValueError):
+                return None
+
+        def head_uptodate():
+            """
+            Check if current local head is the same as requested one
+            """
+            repo = self._get_repo(name)
+            ref = get_reference(repo)
+            return ref == repo.head.reference if not repo.head.is_detached else ref == repo.head.commit
+
+        yield {
+            'name': name,
+            'uptodate': [not remote.fetch, head_uptodate]
+        }
+
+        repo = self._get_repo(name)
+
+        def head_checkout():
+            """
+            Try to checkout local head to the requested branch or commit
+            :return:
+                True when checkout was successful or False when branch or commit does not exist
+            """
+            if remote.branch in repo.heads:
+                head = repo.heads[remote.branch]
+                head.checkout()
+                if remote.fetch:
+                    for repo_remote in repo.remotes:
+                        repo_remote.pull()
+                return True
+
             for repo_remote in repo.remotes:
                 if remote.branch in repo_remote.refs:
                     ref = repo_remote.refs[remote.branch]
-                    repo.create_head(remote.branch, ref).set_tracking_branch(ref)
-                    break
-            else:
-                try:
-                    # try to detach head to specific commit
-                    repo.head.reference = repo.commit(remote.branch)
-                    is_detached = True
-                except git.BadName:
-                    logging.error("Branch '{}' does not exist".format(remote.branch))
-                    raise BuilderStop
+                    head = repo.create_head(remote.branch, ref)
+                    head.set_tracking_branch(ref)
+                    head.checkout()
+                    return True
+            try:
+                # try to detach head to specific commit
+                commit = repo.commit(remote.branch)
+                repo.git.checkout(commit)
+                return True
+            except (git.BadName, ValueError):
+                return False
 
-        if not is_detached:
-            branch = repo.heads[remote.branch]
-            if repo.head.is_detached or repo.active_branch != branch:
-                branch.checkout()
-            if remote.fetch:
-                for repo_remote in repo.remotes:
-                    repo_remote.pull()
+        # try to checkout head from local repository when fetch is disabled
+        if remote.fetch or not head_checkout():
+            # fetch remote repository when fetch is enabled or local checkout wasn't successful
+            for repo_remote in repo.remotes:
+                repo_remote.fetch()
 
-    def _prepare_feeds(self):
+            # try checkout after remote fetch (it is second attempt when fetch is disabled)
+            if not head_checkout():
+                logging.error("Cannot checkout branch '{}'".format(remote.branch))
+                raise BuilderStop
+
+    def checkout_repos(self):
+        """
+        Fetch and checkout all repositories to specified branch
+
+        :return:
+            List of generators used for doit task.
+        """
+        for remote in RemoteWalker(self._config.remote):
+            yield self._checkout_repo(remote)
+
+    def prepare_feeds_conf(self):
         """
         Prepare LEDE feeds
 
-        It creates `feeds.conf` when it is not present and then calls
+        It creates `feeds.conf` when it is not present
 
-        - `./scripts/feeds update -a`
-        - `./scripts/feeds install -a`
+        :return:
+            Generator returning dictionary with dependencies and action for doit task.
         """
-        logging.info("Preparing feeds...")
-        lede_dir = self._working_dir
-        luci_dir = self._get_repo(self.LUCI).working_dir
-        feeds_src_path = os.path.join(lede_dir, self.FEEDS_CONF_SRC)
-        feeds_dst_path = os.path.join(lede_dir, self.FEEDS_CONF_DST)
+        luci_dir = self._get_repo_path(self.LUCI)
+        feeds_src_path = os.path.join(self._working_dir, self.FEEDS_CONF_SRC)
+        feeds_dst_path = os.path.join(self._working_dir, self.FEEDS_CONF_DST)
 
-        feeds_create = self._config.feeds.create_always == 'yes'
-        feeds_update = self._config.feeds.update_always == 'yes'
-        feeds_install = self._config.feeds.install_always == 'yes'
+        yield {
+            'file_dep': [feeds_src_path],
+            'targets': [feeds_dst_path],
+            'uptodate': [config_changed(luci_dir),
+                         self._config.feeds.create_always != 'yes']
+        }
 
-        if not os.path.exists(feeds_dst_path) or feeds_create:
-            logging.debug("Creating '{}'".format(feeds_dst_path))
-            feeds_update = True
-            feeds_install = True
-            with open(feeds_src_path, 'r') as feeds_src, open(feeds_dst_path, 'w') as feeds_dst:
-                for line in feeds_src:
-                    if self.LUCI not in line:
-                        feeds_dst.write(line)
-                # create link to LUCI in feeds configuration file
-                feeds_dst.write('src-link {} {}\n'.format(self.LUCI, luci_dir))
+        logging.debug("Creating '{}'".format(feeds_dst_path))
+        with open(feeds_src_path, 'r') as feeds_src, open(feeds_dst_path, 'w') as feeds_dst:
+            for line in feeds_src:
+                if self.LUCI not in line:
+                    feeds_dst.write(line)
+            # create link to LUCI in feeds configuration file
+            feeds_dst.write('src-link {} {}\n'.format(self.LUCI, luci_dir))
 
-        if feeds_update:
-            logging.debug('Updating feeds')
-            self._run(os.path.join('scripts', 'feeds'), 'update', '-a')
-        if feeds_install:
-            logging.debug('Installing feeds')
-            self._run(os.path.join('scripts', 'feeds'), 'install', '-a')
+    def prepare_feeds_update(self):
+        """
+        Update feeds from all sources
 
-    def _prepare_config(self):
+        :return:
+            Generator returning dictionary with dependencies and action for doit task.
+        """
+        yield {
+            'file_dep': [os.path.join(self._working_dir, self.FEEDS_CONF_DST)],
+            'targets': [os.path.join(self._working_dir, self.FEEDS_DIR)],
+            'uptodate': [self._config.feeds.update_always != 'yes']
+        }
+
+        logging.debug('Updating feeds')
+        self._run(os.path.join('scripts', 'feeds'), 'update', '-a')
+
+    def prepare_feeds_install(self):
+        """
+        Install updated feeds
+
+        :return:
+            Generator returning dictionary with dependencies and action for doit task.
+        """
+        feeds_dir = os.path.join(self._working_dir, self.FEEDS_DIR)
+
+        def config_files_unchanged(task, values):
+            """
+            Check if configuration files are unchanged
+
+            These files cannot be used as a file dependencies because they are gathered dynamically and previous
+            task can modify them (e.g. checkout another branch)
+            """
+            config_files_key = 'config_files'
+            count = 0
+
+            def save_now():
+                return {config_files_key: count}
+            task.value_savers.append(save_now)
+
+            patterns = [
+                ['**', 'Makefile'],
+                ['**', 'Config.in'],
+                ['*.index']
+            ]
+            result = True
+            for config_file in chain(*(glob.glob(os.path.join(feeds_dir, *pattern), recursive=True)
+                                       for pattern in patterns)):
+                result &= check_timestamp_unchanged(config_file)(task, values)
+                count += 1
+
+            prev_count = values.get(config_files_key)
+            return result and prev_count == count
+
+        yield {
+            'file_dep': [os.path.join(self._working_dir, self.FEEDS_CONF_DST)],
+            'uptodate': [self._config.feeds.update_always != 'yes',
+                         self._config.feeds.install_always != 'yes',
+                         config_files_unchanged]
+        }
+
+        logging.debug('Installing feeds')
+        self._run(os.path.join('scripts', 'feeds'), 'install', '-a')
+
+    def prepare_default_config(self):
+        """
+        Initial default configuration
+
+        :return:
+            Generator returning dictionary with dependencies and action for doit task.
+        """
+        yield {
+            'uptodate': [run_once]
+        }
+
+        logging.debug("Creating default configuration")
+        self._run('make', 'defconfig')
+
+    def prepare_config(self):
         """
         Prepare LEDE configuration file
 
         It sets default configuration specified in the configuration file under `build.config`.
         It also sets paths to Linux and CGMiner external directories in this configuration file.
-        """
-        logging.info("Preparing config...")
 
+        :return:
+            Generator returning dictionary with dependencies and action for doit task.
+        """
         config_src_path, config_dst_path = self._get_config_paths()
+        target_config = io.StringIO()
 
-        config_copy = self._config.build.config_always == 'yes'
-        default_config = not os.path.exists(config_dst_path)
+        # generate target configuration
+        for config, generator in self.GENERATED_CONFIGS:
+            generator and generator(self, target_config, config)
 
-        if default_config:
-            logging.debug("Creating default configuration")
-            self._run('make', 'defconfig')
+        target_config.seek(0)
 
-        if default_config or not is_target_latest(config_src_path, config_dst_path) or config_copy:
-            logging.debug("Copy config from '{}'".format(config_src_path))
-            shutil.copy(config_src_path, config_dst_path)
+        feeds_files = [
+            '.config-feeds.in',
+            '.packagedeps',
+            '.packageinfo',
+            '.config-package.in',
+            '.packagesubdirs'
+        ]
 
-            with open(config_dst_path, 'a') as config_dst:
-                # set paths to Linux and CGMiner external directories
-                for config, generator in self.GENERATED_CONFIGS:
-                    generator and generator(self, config_dst, config)
-            logging.debug("Creating full configuration file")
-            self._run('make', 'defconfig')
+        yield {
+            'file_dep': [config_src_path] +
+                        [os.path.join(self._working_dir, 'tmp', file_name) for file_name in feeds_files],
+            'targets': [config_dst_path],
+            'uptodate': [config_changed(target_config.getvalue()),
+                         self._config.build.config_always != 'yes']
+        }
 
-    def _prepare_keys(self, force=False):
+        logging.debug("Copy config from '{}'".format(config_src_path))
+        shutil.copy(config_src_path, config_dst_path)
+
+        with open(config_dst_path, 'a') as config_dst_file:
+            shutil.copyfileobj(target_config, config_dst_file)
+
+        logging.debug("Creating full configuration file")
+        self._run('make', 'defconfig')
+
+    def _prepare_key(self, attribute: str, key_name: str):
         """
-        Prepare LEDE build keys
+        Prepare one build key
 
         The keys are used for signing packages and sysupgrade tarball.
         When configuration does not contain any key then LEDE generates new one.
 
-        :param force:
-            Force to reconfigure build keys.
+        :return:
+            Generator returning dictionary with dependencies and action for doit task.
         """
-        default_key = self._config.build.get('key', None)
+        key_src_path = self._config.build.get('key.' + attribute, None)
+        key_dst_path = os.path.join(self._working_dir, key_name)
 
-        if not default_key:
-            # missing build key -> use random one generated by LEDE
-            return
+        yield {
+            'name': '{}_key'.format(attribute),
+            'uptodate': [not key_src_path or
+                         (os.path.exists(key_dst_path) and filecmp.cmp(key_src_path, key_dst_path)),
+                         config_changed('user' if key_src_path else 'generated')]
+        }
 
-        logging.info("{} build key...".format('Preparing default' if not force else 'Overriding'))
+        if key_src_path:
+            # copy new key
+            logging.debug("Copy {} build key from '{}'".format(attribute, key_src_path))
+            shutil.copy(key_src_path, key_dst_path)
+        else:
+            # delete all base-files directories to force LEDE to generate new build keys
+            for base_file_dir in glob.glob('{}/build_dir/target-*/linux-*/base-files'.format(self._working_dir)):
+                shutil.rmtree(base_file_dir)
+            # delete previous key
+            logging.debug("Delete {} build key'".format(attribute, key_src_path))
+            if os.path.exists(key_dst_path):
+                os.remove(key_dst_path)
 
-        lede_dir = self._get_repo(self.LEDE).working_dir
-        key1_src_path = default_key.secret
-        key2_src_path = default_key.public
-        key1_dst_path = os.path.join(lede_dir, self.BUILD_KEY_NAME)
-        key2_dst_path = os.path.join(lede_dir, self.BUILD_KEY_PUB_NAME)
+    def prepare_keys(self):
+        """
+        Prepare LEDE build keys
 
-        if force or not is_target_latest(key1_src_path, key1_dst_path):
-            logging.debug("Copy secret build key from '{}'".format(key1_src_path))
-            shutil.copy(key1_src_path, key1_dst_path)
-
-        if force or not is_target_latest(key2_src_path, key2_dst_path):
-            logging.debug("Copy public build key from '{}'".format(key2_src_path))
-            shutil.copy(key2_src_path, key2_dst_path)
+        :return:
+            List of generators used for doit task.
+        """
+        return iter([
+            self._prepare_key('secret', self.BUILD_KEY_NAME),
+            self._prepare_key('public', self.BUILD_KEY_PUB_NAME)
+        ])
 
     def _config_lede(self):
         """
@@ -670,24 +837,6 @@ class Builder:
         """
         self._run('make', 'kernel_menuconfig')
 
-    def prepare(self):
-        """
-        Prepare all projects and configure the LEDE build system.
-        """
-        logging.info("Preparing build directory...'")
-        if not os.path.exists(self._build_dir):
-            logging.debug("Creating build directory '{}'".format(self._build_dir))
-            os.makedirs(self._build_dir)
-        for remote in RemoteWalker(self._config.remote):
-            self._prepare_repo(remote)
-
-        # set working directory to LEDE root directory
-        self._working_dir = self._get_repo(self.LEDE).working_dir
-
-        self._prepare_feeds()
-        self._prepare_config()
-        self._prepare_keys()
-
     def clean(self, purge: bool=False):
         """
         Clean all projects or purge them to initial state.
@@ -719,7 +868,7 @@ class Builder:
             logging.info("Start Linux kernel configuration...'")
             self._config_kernel()
 
-    def build(self, targets=None, force_key=False):
+    def build(self, targets=None):
         """
         Build the Miner firmware for current configuration
 
@@ -731,13 +880,8 @@ class Builder:
         :param targets:
             List of targets for build. Target is specified as an alias to real LEDE target.
             The aliases are stored in configuration file under `build.aliases`
-        :param force_key:
-            Force new key configuration.
         """
         logging.info("Start building LEDE...'")
-        # override default build key if user specified the other one on command line
-        if force_key:
-            self._prepare_keys(True)
 
         # set PATH environment variable
         env_path = self._config.build.get('env_path', None)
@@ -825,7 +969,7 @@ class Builder:
         :return:
             String with path to FPGA bitstream.
         """
-        platform_dir = self._get_repo(self.PLATFORM).working_dir
+        platform_dir = self._get_repo_path(self.PLATFORM)
         platform_subtarget = self._split_platform()[1]
         return os.path.join(platform_dir, platform_subtarget, 'system.bit')
 
@@ -1671,6 +1815,12 @@ class Builder:
                 return diff.a_path
 
         for name, repo in self._repos.items():
+            if not repo:
+                logging.warning("Status for '{}'".format(name))
+                print('missing or corrupted repository')
+                print()
+                continue
+
             working_dir = os.path.relpath(repo.working_dir, os.getcwd())
             branch_name = repo.active_branch.name if not repo.head.is_detached else \
                 'HEAD detached at {}'.format(repo.head.object.hexsha[:8])

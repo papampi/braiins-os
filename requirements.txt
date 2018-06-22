@@ -1,6 +1,7 @@
-GitPython==2.1.8
+GitPython==2.1.10
 ruamel.yaml==0.15.37
 termcolor==1.1.0
 colorlog==2.10.0
 progress==1.2
 Paramiko==2.0
+doit==0.31.1

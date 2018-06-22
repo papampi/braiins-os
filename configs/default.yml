@@ -26,7 +26,7 @@ build:
     secret: keys/test
     public: keys/test.pub
   # always copy default configuration file
-  config_always: yes
+  config_always: no
   # relative or absolute path to the build directory
   dir: build
   # specifies the number of jobs to run simultaneously

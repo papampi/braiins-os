@@ -5,6 +5,12 @@ import argparse
 import logging
 import colorlog
 import miner
+import os
+
+import miner.dodo
+
+from doit.cmd_base import ModuleTaskLoader
+from doit.doit_cmd import DoitMain
 
 
 class CommandManager:
@@ -12,6 +18,7 @@ class CommandManager:
         self._argv = None
         self._args = None
         self._config = None
+        self._build_dir = None
 
     def set_args(self, argv, args):
         self._argv = argv
@@ -35,53 +42,62 @@ class CommandManager:
         if args.platform:
             self._config.miner.platform = args.platform
 
-    def get_builder(self):
+    def _doit_prepare(self, builder, task):
+        miner.dodo.builder = builder
+
+        # create build directory for storing doit database
+        if not os.path.exists(builder.build_dir):
+            os.makedirs(builder.build_dir)
+
+        opt_vals = {'dep_file': os.path.join(builder.build_dir, '.doit.db')}
+        commander = DoitMain(ModuleTaskLoader(miner.dodo),
+                             extra_config={'GLOBAL': opt_vals})
+        commander.BIN_NAME = 'doit'
+
+        logging.info('Preparing LEDE build system...')
+        commander.run(['--verbosity', '2', task])
+
+    def get_builder(self, task=None):
         """
         Return miner builder for current configuration
         """
-        return miner.Builder(self._config, self._argv)
+        builder = miner.Builder(self._config, self._argv)
+        if task:
+            self._doit_prepare(builder, task)
+        return builder
 
     def prepare(self):
         logging.debug("Called command 'prepare'")
         if self._args.fetch:
             self._config.remote.fetch_always = 'yes'
-
-        builder = self.get_builder()
-        builder.prepare()
+            self.get_builder('checkout')
+        else:
+            self.get_builder('prepare')
 
     def clean(self):
         logging.debug("Called command 'clean'")
-        builder = self.get_builder()
-        if self._args.purge:
-            builder.clean(purge=True)
-            builder.prepare()
-        else:
-            builder.prepare()
-            builder.clean()
+        builder = self.get_builder('prepare' if not self._args.purge else None)
+        builder.clean(purge=self._args.purge)
 
     def config(self):
         logging.debug("Called command 'config'")
-        builder = self.get_builder()
-        builder.prepare()
+        builder = self.get_builder('prepare')
         builder.config(kernel=self._args.kernel)
 
     def build(self):
         logging.debug("Called command 'build'")
-        force_key = False
         if self._args.key:
             keys = self._args.key.split(':', 1)
             key = self._config.setdefault('build.key', miner.ConfigDict())
             key.secret = keys[0]
-            key.public = keys[1] if len(keys) > 1 else '{}.pub'.format(key[0])
-            force_key = True
+            key.public = keys[1] if len(keys) > 1 else '{}.pub'.format(keys[0])
         if self._args.jobs:
             self._config.build.jobs = self._args.jobs
         if self._args.verbose:
             self._config.build.verbose = 'yes'
 
-        builder = self.get_builder()
-        builder.prepare()
-        builder.build(targets=self._args.target, force_key=force_key)
+        builder = self.get_builder('prepare')
+        builder.build(targets=self._args.target)
 
     def deploy(self):
         logging.debug("Called command 'deploy'")
@@ -126,7 +142,6 @@ class CommandManager:
                     setattr(local, target, path)
 
         builder = self.get_builder()
-        builder.prepare()
         builder.deploy()
 
     def status(self):
@@ -137,14 +152,11 @@ class CommandManager:
     def debug(self):
         logging.debug("Called command 'debug'")
         builder = self.get_builder()
-        builder.prepare()
-        builder.build()
         builder.debug()
 
     def toolchain(self):
         logging.debug("Called command 'toolchain'")
         builder = self.get_builder()
-        builder.prepare()
         builder.toolchain()
 
     def release(self):
@@ -157,8 +169,7 @@ class CommandManager:
             # always fetch all repositories before creating release
             self._config.remote.fetch_always = 'yes'
 
-        builder = self.get_builder()
-        builder.prepare()
+        builder = self.get_builder('checkout')
         builder.release()
 
     def key(self):
@@ -167,7 +178,6 @@ class CommandManager:
         public = self._args.public or '{}.pub'.format(secret)
 
         builder = self.get_builder()
-        builder.prepare()
         builder.generate_key(secret_path=secret, public_path=public)
 
 
