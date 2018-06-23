@@ -72,6 +72,8 @@ class CommandManager:
             self._config.remote.fetch_always = 'yes'
             self.get_builder('checkout')
         else:
+            if self._args.update_feeds:
+                self._config.feeds.update_always = 'yes'
             self.get_builder('prepare')
 
     def clean(self):
@@ -196,6 +198,8 @@ def main(argv):
     subparser.set_defaults(func=command.prepare)
     subparser.add_argument('--fetch', action='store_true',
                            help='force to fetch all repositories')
+    subparser.add_argument('--update-feeds', action='store_true',
+                           help='force to update all feeds')
 
     # create the parser for the "clean" command
     subparser = subparsers.add_parser('clean',

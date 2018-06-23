@@ -71,8 +71,7 @@ class Builder:
     UBOOT = 'u-boot'
     LINUX = 'linux'
     CGMINER = 'cgminer'
-    FEEDS_CONF_SRC = 'feeds.conf.default'
-    FEEDS_CONF_DST = 'feeds.conf'
+    FEEDS_CONF = 'feeds.conf'
     FEEDS_DIR = 'feeds'
     CONFIG_NAME = '.config'
     BUILD_KEY_NAME = 'key-build'
@@ -273,6 +272,17 @@ class Builder:
                     'subtarget': split_platform[1]
                 }
 
+            def add_tag(self, name, value):
+                """
+                Add new format tag
+
+                :param name:
+                    Name of tag.
+                :param value:
+                    Value which will be used for tag replacement.
+                """
+                self._format_tags[name] = value
+
             def __call__(self, value: str) -> str:
                 """
                 Create callable object used in configuration parset for tag expansion
@@ -288,8 +298,11 @@ class Builder:
         self._config.formatter = StrFormatter(self)
         self._argv = argv
         self._build_dir = os.path.join(os.path.abspath(self._config.build.dir), self._config.build.name)
+        # add build_dir tag after it has been initialized
+        self._config.formatter.add_tag('build_dir', self._build_dir)
         # set working directory to LEDE root directory
         self._working_dir = self._get_repo_path(self.LEDE)
+        self._tmp_dir = os.path.join(self._working_dir, 'tmp')
         self._repos = OrderedDict()
         self._init_repos()
 
@@ -619,24 +632,19 @@ class Builder:
         :return:
             Generator returning dictionary with dependencies and action for doit task.
         """
-        luci_dir = self._get_repo_path(self.LUCI)
-        feeds_src_path = os.path.join(self._working_dir, self.FEEDS_CONF_SRC)
-        feeds_dst_path = os.path.join(self._working_dir, self.FEEDS_CONF_DST)
+        feeds_path = os.path.join(self._working_dir, self.FEEDS_CONF)
+        feeds_links = self._config.feeds.links
 
         yield {
-            'file_dep': [feeds_src_path],
-            'targets': [feeds_dst_path],
-            'uptodate': [config_changed(luci_dir),
-                         self._config.feeds.create_always != 'yes']
+            'targets': [feeds_path],
+            'uptodate': [self._config.feeds.create_always != 'yes',
+                         config_changed({name: link for name, link in feeds_links.items()})]
         }
 
-        logging.debug("Creating '{}'".format(feeds_dst_path))
-        with open(feeds_src_path, 'r') as feeds_src, open(feeds_dst_path, 'w') as feeds_dst:
-            for line in feeds_src:
-                if self.LUCI not in line:
-                    feeds_dst.write(line)
-            # create link to LUCI in feeds configuration file
-            feeds_dst.write('src-link {} {}\n'.format(self.LUCI, luci_dir))
+        logging.debug("Creating '{}'".format(feeds_path))
+        with open(feeds_path, 'w') as feeds_file:
+            for feeds_name, feeds_link in feeds_links.items():
+                feeds_file.write('src-link {} {}\n'.format(feeds_name, feeds_link))
 
     def prepare_feeds_update(self):
         """
@@ -645,24 +653,32 @@ class Builder:
         :return:
             Generator returning dictionary with dependencies and action for doit task.
         """
+        feeds_dir = os.path.join(self._working_dir, self.FEEDS_DIR)
+
         yield {
-            'file_dep': [os.path.join(self._working_dir, self.FEEDS_CONF_DST)],
-            'targets': [os.path.join(self._working_dir, self.FEEDS_DIR)],
+            'file_dep': [os.path.join(self._working_dir, self.FEEDS_CONF)],
+            'targets': [feeds_dir],
             'uptodate': [self._config.feeds.update_always != 'yes']
         }
 
-        logging.debug('Updating feeds')
+        # delete all previous feeds files and related configurations
+        shutil.rmtree(feeds_dir, ignore_errors=True)
+        shutil.rmtree(self._tmp_dir, ignore_errors=True)
+
+        logging.debug('Updating all feeds')
         self._run(os.path.join('scripts', 'feeds'), 'update', '-a')
 
-    def prepare_feeds_install(self):
+    def _prepare_feeds_link(self, name, link):
         """
         Install updated feeds
 
+        :param name:
+            Feeds name.
+        :param link:
+            Local link to feeds directory.
         :return:
             Generator returning dictionary with dependencies and action for doit task.
         """
-        feeds_dir = os.path.join(self._working_dir, self.FEEDS_DIR)
-
         def config_files_unchanged(task, values):
             """
             Check if configuration files are unchanged
@@ -683,7 +699,7 @@ class Builder:
                 ['*.index']
             ]
             result = True
-            for config_file in chain(*(glob.glob(os.path.join(feeds_dir, *pattern), recursive=True)
+            for config_file in chain(*(glob.glob(os.path.join(link, *pattern), recursive=True)
                                        for pattern in patterns)):
                 result &= check_timestamp_unchanged(config_file)(task, values)
                 count += 1
@@ -692,14 +708,28 @@ class Builder:
             return result and prev_count == count
 
         yield {
-            'file_dep': [os.path.join(self._working_dir, self.FEEDS_CONF_DST)],
+            'name': name,
+            'file_dep': [os.path.join(self._working_dir, self.FEEDS_CONF)],
             'uptodate': [self._config.feeds.update_always != 'yes',
                          self._config.feeds.install_always != 'yes',
                          config_files_unchanged]
         }
 
-        logging.debug('Installing feeds')
-        self._run(os.path.join('scripts', 'feeds'), 'install', '-a')
+        logging.debug('Installing feeds {}'.format(name))
+        self._run(os.path.join('scripts', 'feeds'), 'update', name)
+        self._run(os.path.join('scripts', 'feeds'), 'install', '-a', '-p', name)
+
+    def prepare_feeds(self):
+        """
+        Update and install all feeds
+
+        :return:
+            List of generators used for doit task.
+        """
+        feeds_links = self._config.feeds.links
+
+        for feeds_name, feeds_link in feeds_links.items():
+            yield self._prepare_feeds_link(feeds_name, feeds_link)
 
     def prepare_default_config(self):
         """
@@ -744,7 +774,7 @@ class Builder:
 
         yield {
             'file_dep': [config_src_path] +
-                        [os.path.join(self._working_dir, 'tmp', file_name) for file_name in feeds_files],
+                        [os.path.join(self._tmp_dir, file_name) for file_name in feeds_files],
             'targets': [config_dst_path],
             'uptodate': [config_changed(target_config.getvalue()),
                          self._config.build.config_always != 'yes']

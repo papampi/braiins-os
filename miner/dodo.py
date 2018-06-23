@@ -55,9 +55,15 @@ def task_prepare():
     """
     yield _get_sub_task('feeds_conf', builder.prepare_feeds_conf(), ['checkout'])
     yield _get_sub_task('feeds_update', builder.prepare_feeds_update(), ['prepare:feeds_conf'])
-    yield _get_sub_task('feeds_install', builder.prepare_feeds_install(), ['prepare:feeds_update'])
 
-    yield _get_sub_task('default_config', builder.prepare_default_config(), ['prepare:feeds_install'])
+    feeds_tasks = []
+    for prepare_feeds in builder.prepare_feeds():
+        task = _get_sub_task(None, prepare_feeds, ['prepare:feeds_update'])
+        task['name'] = 'feeds_install:{}'.format(task['name'])
+        feeds_tasks.append('prepare:{}'.format(task['name']))
+        yield task
+
+    yield _get_sub_task('default_config', builder.prepare_default_config(), feeds_tasks)
     yield _get_sub_task('config', builder.prepare_config(), ['prepare:default_config'])
 
     for prepare_key in builder.prepare_keys():

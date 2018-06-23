@@ -54,8 +54,19 @@ remote:
   repos:
     lede:
       uri: git@gitlab.bo:x/lede.git
+    lede-packages:
+      uri: git://git.openwrt.org/feed/packages.git
+      branch: cd5c448758f30868770b9ebf8b656c1a4211a240
+    lede-routing:
+      uri: git://git.openwrt.org/feed/routing.git
+      branch: d11075cd40a88602bf4ba2b275f72100ddcb4767
+    lede-telephony:
+      uri: git://git.openwrt.org/feed/telephony.git
+      branch: ac6415e61f147a6892fd2785337aec93ddc68fa9
     luci:
       uri: git@gitlab.bo:x/luci.git
+    miner-feeds:
+      uri: git@gitlab.bo:x/braiins-miner-feeds.git
     platform:
       uri: git@gitlab.bo:x/{target}-io-bin.git
     u-boot:
@@ -84,6 +95,13 @@ feeds:
   update_always: no
   # always install feeds
   install_always: no
+  # list of links to local feeds
+  links:
+    packages: '{build_dir}/lede-packages'
+    routing: '{build_dir}/lede-routing'
+    telephony: '{build_dir}/lede-telephony'
+    luci: '{build_dir}/luci'
+    miner: '{build_dir}/miner-feeds'
 
 uenv:
   # boot Linux from SD instead of NAND
