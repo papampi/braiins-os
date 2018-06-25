@@ -76,9 +76,9 @@ $ ./bb.py --config configs/user.yml --platform zynq-dm1-g19 build
 
 ### Firmware Release
 
-The firmware with specific version has tag in a git repository which contains modified configuration set to exact
-commit of all dependent repositories. The tag can be checked out for specific firmware version then we can call
-*build* command for reproducible firmware release.
+The firmware with specific version has tag in a git repository which contains modified configuration set to exact commit
+of all dependent repositories. The tag can be checked out for specific firmware version then we can call *build* command
+for reproducible firmware release.
 
 ### Signing
 
@@ -187,8 +187,8 @@ The default configuration file is fully commented so the following list of globa
 * *miner* - the settings concerning one instance of miner (platform, MAC, HWID, default pool); default configuration is
   used only for testing and is usually overridden from command line during release process
 * *build* - the configuration of build process (path to LEDE configuration, build directories, keys, ...)
-* *remote* - the list of all remote repositories with parameters for fetching; the parameters *fetch* and *branch* used as
-  a default value for all repositories could be overridden in a specific repository by parameter of the same name
+* *remote* - the list of all remote repositories with parameters for fetching; the parameters *fetch* and *branch* used
+  as a default value for all repositories could be overridden in a specific repository by parameter of the same name
 * *local* - the configuration of output directories for local targets for deployment
 * *feeds* - the settings of feeds fetching and installation
 * *uenv* - the configuration of *uEnv.txt* content (this file is used only for SD images)
@@ -197,9 +197,9 @@ The default configuration file is fully commented so the following list of globa
 
 ### CLI Parameters
 
-The braiins build system supports multiple configurations which can be selected by global parameter
-*--config*. When the script is run without this parameter, **configs/default.yml** is used. The *--platform*
-parameter can be used for changing the target platform.
+The braiins build system supports multiple configurations which can be selected by global parameter *--config*. When the
+script is run without this parameter, **configs/default.yml** is used. The *--platform* parameter can be used for
+changing the target platform.
 
 *Global configuration parameters must be consistently used with all commands to guarantee predictable results!*
 
@@ -217,21 +217,21 @@ The build system commands are described in detail in separate sections. Below is
 
 ### Packages
 
-The standard LEDE menuconfig is used for firmware image configuration. When some changes are detected, the
-difference in configuration is saved to the file specified in *YAML* configuration file under *build.config*
-attribute.
+The standard LEDE menuconfig is used for firmware image configuration. When some changes are detected, the difference in
+configuration is saved to the file specified in *YAML* configuration file under *build.config* attribute.
 
 ```bash
 # configure image packages
 $ ./bb.py config
 ```
 
-Multiple firmware images are being built at once (NAND, NAND Recovery, SD, ...). We must be specify which image will contain a particular package.
-It is done in two ways:
+Multiple firmware images are being built at once (NAND, NAND Recovery, SD, ...). We must be specify which image will
+contain a particular package. It is done in two ways:
 
-- When a package is installed to all images without exception then only LEDE menuconfig is used where the package must be selected by asterisk symbol `<*>`
-- When a package is installed only to specific images then the package must be selected as a module `<M>` and added
-to an external package list specified in a *build.packages* attribute.
+- When a package is installed to all images without exception then only LEDE menuconfig is used where the package must
+be selected by asterisk symbol `<*>`
+- When a package is installed only to specific images then the package must be selected as a module `<M>` and added to
+an external package list specified in a *build.packages* attribute.
 
 The package file is just another YAML structured format that stores lists with inheritance support. The lists with
 *image_* prefix are used for description of installed packages in specified image:
@@ -271,10 +271,10 @@ $ ./bb.py config --kernel
 ## Deployment
 
 Whenever firmware images are built by the LEDE build system, it is possible to deploy them over ssh connection directly
-to the running miner (when it runs compatible firmware) or store it to a local path. The default configuration builds all
-local targets and stores its result to predefined location **output**/*\<platform\>*. It is convenient for testing when
-we want to verify all possible targets. However, for real deployment, it is more useful to specify a target from the command
-line.
+to the running miner (when it runs compatible firmware) or store it to a local path. The default configuration builds
+all local targets and stores its result to predefined location **output**/*\<platform\>*. It is convenient for testing
+when we want to verify all possible targets. However, for real deployment, it is more useful to specify a target from
+the command line.
 
 ### System Upgrade vs. Deployment
 
@@ -313,9 +313,9 @@ $ ./bb.py deploy sd
 $ ./bb.py deploy nand
 ``` 
 
-When more than one miner needs to be managed, several arguments can be used to specify remote miner. It can be
-done only by miner MAC address specification or even with a hostname when local DNS server does not work correctly or
-when the MAC address does not correspond with the hostname.
+When more than one miner needs to be managed, several arguments can be used to specify remote miner. It can be done only
+by miner MAC address specification or even with a hostname when local DNS server does not work correctly or when the MAC
+address does not correspond with the hostname.
 
 *But be very cautious with MAC address!* Even if parameter *--mac* is omitted the default MAC address from configuration
 file is used (`00:0A:35:FF:FF:FF`) and remote miner is upgraded with it. Therefore, it is recommended to use hostname
@@ -341,11 +341,11 @@ the NAND or SD partition:
 
 ### Local Targets
 
-Local targets can be used for deploying images to locations specified by a file path. The default configuration
-enables all local targets for storing all images to a predefined directory **output**/*\<platform\>*. There are also
-special local targets for deployment utilities used for upgrading the original firmware to the braiins/LEDE one. The
-other special target is for a feeds server preparation used for upgrading braiins/LEDE firmware with a standard LEDE
-*opkg* utility. The following list specifies main local targets:
+Local targets can be used for deploying images to locations specified by a file path. The default configuration enables
+all local targets for storing all images to a predefined directory **output**/*\<platform\>*. There are also special
+local targets for deployment utilities used for upgrading the original firmware to the braiins/LEDE one. The other
+special target is for a feeds server preparation used for upgrading braiins/LEDE firmware with a standard LEDE *opkg*
+utility. The following list specifies main local targets:
 
 * *local_sd* - the same function as remote target but target is specified by a local file path
 * *local_sd_recovery* - writes special SD recovery image to a local file path (it can be used for repairing a
@@ -360,8 +360,8 @@ Similarly to the remote targets there are also *configuration* targets:
 * *local_sd_recovery_config* - modify only *uEnv.txt* file (useful for changing parameters *sd_boot*, *factory_reset*
   and *sd_images* controlling SD recovery image for factory reset)
 
-The output location is usually specified by the command line. Since more than one target can by specified at once
-there is special notation for passing local file path to the specific local target:
+The output location is usually specified by the command line. Since more than one target can by specified at once there
+is special notation for passing local file path to the specific local target:
 
 ```
 <local_target>[:<path>]
@@ -391,9 +391,9 @@ $ ./bb.py deploy local_sd_config:/mnt/mmc0 --uenv factory_reset
 
 ### uEnv
 
-When U-Boot finds inserted SD card it tries to load a file *uEnv.txt* from its first partition formatted with FAT
-file system. There are environment variables which can alter U-Boot behavior during boot process. There are
-standard U-Boot variables (e.g. ethaddr) and some additional ones are provided by braiins/LEDE firmware. Configuration of these
+When U-Boot finds inserted SD card it tries to load a file *uEnv.txt* from its first partition formatted with FAT file
+system. There are environment variables which can alter U-Boot behavior during boot process. There are standard U-Boot
+variables (e.g. ethaddr) and some additional ones are provided by braiins/LEDE firmware. Configuration of these
 variables can be done in the braiins build system YAML file in *uenv* section. These parameters can also be passed by
 command line argument *--uenv*. The following list shows all supported settings:
 
@@ -402,9 +402,9 @@ command line argument *--uenv*. The following list shows all supported settings:
 * *sd_images* - used for factory reset images from SD (*factory_reset* must also be enable)
 * *sd_boot* - boot kernel image from SD (the U-Boot is still booted from the NAND)
 
-The *sd_boot* requires compatible and functional U-Boot on NAND. When the NAND is corrupted it may not work. In
-that case a HW jumper must be used for a miner control board reconfiguration. E.g. *J2* pins must be bridged on
-G9/G19 boards to change boot mode from NAND to SD card.
+The *sd_boot* requires compatible and functional U-Boot on NAND. When the NAND is corrupted it may not work. In that
+case a HW jumper must be used for a miner control board reconfiguration. E.g. *J2* pins must be bridged on G9/G19 boards
+to change boot mode from NAND to SD card.
 
 ### Default Pool
 
@@ -421,8 +421,8 @@ arguments:
 
 ## Release Management
 
-The braiins build system also has tools for firmware versioning which is used in release cycles. It is based on
-git repository with tags which holds name of a firmware version and configuration for reproducible firmware build. The
+The braiins build system also has tools for firmware versioning which is used in release cycles. It is based on git
+repository with tags which holds name of a firmware version and configuration for reproducible firmware build. The
 release cycle has three stages:
 
 1. new version creation,
@@ -440,17 +440,17 @@ clean. After successful call of this command, a *remote* tag is created with the
 firmware_<YYYY-MM-DD>-<patch_level>-<short_sha>
 ```
 
-The `<YYYY-MM-DD>` represents a *date* of the braiins build system *commit* from which is a release created. The value of
-the `<patch_level>` is usually 0 and is incremented only in situation when more then one release is created in one day.
-This increment is done automatically and depends on correctly created git tags. The `<short_sha>` is a SHA prefix
+The `<YYYY-MM-DD>` represents a *date* of the braiins build system *commit* from which is a release created. The value
+of the `<patch_level>` is usually 0 and is incremented only in situation when more then one release is created in one
+day. This increment is done automatically and depends on correctly created git tags. The `<short_sha>` is a SHA prefix
 of the *commit* used for the date. The prefix is 8 characters long.
 
-The *release* command has also *--include* argument which is used for specification of a firmware tarball
-content. In a special situation that a new firmware needs to upgrade also a U-Boot or a FPGA
-bitstream. Occasionally, a bash script (*COMMAND*) can also be added. It is run before in pre-init phase of the
-standard system upgrade process. It can contain some control checks or fixes of previous firmware running on a
-miner. The source code of this script is stored in the LEDE repository but must be configured externally that it is
-included to the output image. The following list contains all sysupgrade components supported by the firmware:
+The *release* command has also *--include* argument which is used for specification of a firmware tarball content. In a
+special situation that a new firmware needs to upgrade also a U-Boot or a FPGA bitstream. Occasionally, a bash script
+(*COMMAND*) can also be added. It is run before in pre-init phase of the standard system upgrade process. It can contain
+some control checks or fixes of previous firmware running on a miner. The source code of this script is stored in the
+LEDE repository but must be configured externally that it is included to the output image. The following list contains
+all sysupgrade components supported by the firmware:
 
 * *command* - bash script executed during firmware system upgrade
 * *uboot* - the U-Boot image for upgrading previous one (it can brick the miner)
@@ -467,17 +467,17 @@ $ ./bb.py release --include command fpga
 
 ### Building and Signing 
 
-The official firmware is signed with publisher key which should be private. Only one key should exist and be stored
-in some secured keyring. The key can be generated by the braiins build system with the following command:
+The official firmware is signed with publisher key which should be private. Only one key should exist and be stored in
+some secured keyring. The key can be generated by the braiins build system with the following command:
 
 ```bash
 # generate key pair and store it to the fortified keyring
 $ ./bb.py key ~/keyring/secret
 ```
 
-This command generates private and public key into the specified path. Where the private key is to be securely
-stored is beyond the scope of this description. This key is usually generated only once and is used for signing of
-all the releases firmwares.
+This command generates private and public key into the specified path. Where the private key is to be securely stored is
+beyond the scope of this description. This key is usually generated only once and is used for signing of all the
+releases firmwares.
 
 After the release has been created with the *release* command, it can be built and signed with the following command:
 
@@ -553,4 +553,9 @@ deploy this firmware with the braiins build *deploy* command with *nand* target.
 
 ## License
 
+It is released under the GNU General Public License v3.0 ([GNU GPLv3][2]).
+
+See LICENSE file.
+
 [1]: http://yaml.org/spec/1.2/spec.html
+[2]: https://choosealicense.com/licenses/gpl-3.0/
