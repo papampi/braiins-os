@@ -75,9 +75,6 @@ class Builder:
     """
     DEFAULT_CONFIG = os.path.join('configs', 'default.yml')
 
-    TARGET_ZYNQ_DM1_G9 = 'zynq-dm1-g9'
-    TARGET_ZYNQ_DM1_G19 = 'zynq-dm1-g19'
-
     LEDE_META_DIR = 'miner'
     LEDE_META_SSH = 'ssh.py'
     LEDE_META_HWID = 'hwid.py'
@@ -88,6 +85,7 @@ class Builder:
     UBOOT = 'u-boot'
     LINUX = 'linux'
     CGMINER = 'cgminer'
+    BMMINER = 'bmminer'
     FEEDS_CONF = 'feeds.conf'
     FEEDS_DIR = 'feeds'
     CONFIG_NAME = '.config'
@@ -250,6 +248,7 @@ class Builder:
         ('CONFIG_FIRMWARE_VERSION', _write_firmware_version),
         ('CONFIG_EXTERNAL_KERNEL_TREE', partial(_write_external_path, repo_name=LINUX, name='kernel')),
         ('CONFIG_EXTERNAL_CGMINER_TREE', partial(_write_external_path, repo_name=CGMINER, name='CGMiner')),
+        ('CONFIG_EXTERNAL_BMMINER_TREE', partial(_write_external_path, repo_name=BMMINER, name='BMMiner')),
         ('CONFIG_EXTERNAL_UBOOT_TREE', partial(_write_external_path, repo_name=UBOOT, name='U-Boot')),
         # remove all commented CONFIG_TARGET_
         ('# CONFIG_TARGET_', None)
@@ -1941,7 +1940,7 @@ class Builder:
         env_path = os.environ.get('PATH', '')
 
         sys.stderr.write('# set environment with command:\n')
-        sys.stderr.write('# eval $(./lede.py {} 2>/dev/null)\n'.format(' '.join(self._argv)))
+        sys.stderr.write('# eval $(./bb.py {} 2>/dev/null)\n'.format(' '.join(self._argv)))
         sys.stdout.write('TARGET="{}";\n'.format(target_dir))
         sys.stdout.write('TOOLCHAIN="{}";\n'.format(toolchain_dir))
         sys.stdout.write('export STAGING_DIR="${TARGET}";\n')
