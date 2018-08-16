@@ -1,0 +1,191 @@
+miner:
+  # possible platforms are zynq-dm1-g9, zynq-dm1-g19
+  platform: zynq-am1-s9
+  # default miner MAC address
+  mac: 00:0A:35:FF:FF:FF
+  # miner HW identifier
+#  hwid: Q50QDhdWuWq9yDr5
+  # select NAND firmware which is used for boot
+  firmware: 1
+  # default miner pool
+  pool:
+    host: stratum+tcp://stratum.slushpool.com
+    port: 3333
+    user: braiinstest.worker1
+#    pass: x
+
+build:
+  # name of subdirectory in the build directory
+  name: '{target}'
+  # file with default LEDE configuration
+  config: defaults/s9_braiins.conf
+  # file with list of packages for build images
+  packages: defaults/s9_braiins.yml
+  # build key for signing packages and sysupgrade tarball
+  key:
+    secret: keys/test
+    public: keys/test.pub
+  # always copy default configuration file
+  config_always: no
+  # relative or absolute path to the build directory
+  dir: build
+  # specifies the number of jobs to run simultaneously
+  jobs: 4
+  # show all commands during build process
+  verbose: no
+  # target aliases for LEDE build system
+  aliases:
+    kernel: target/linux
+    cgminer: package/utils/cgminer
+  # components included in sysupgrade (firmware)
+  sysupgrade:
+    command: no
+    uboot: no
+    fpga: no
+
+remote:
+  # default configuration for fetching latest repository
+  fetch: no
+  # always fetch each repositories (it cannot be overridden)
+  fetch_always: no
+  # default branch for repositories
+  branch: master
+  # list of remote repositories
+  repos:
+    lede:
+      uri: git@gitlab.bo:x/lede.git
+      branch: braiins-s9
+    lede-packages:
+      uri: git://git.openwrt.org/feed/packages.git
+      branch: cd5c448758f30868770b9ebf8b656c1a4211a240
+    lede-routing:
+      uri: git://git.openwrt.org/feed/routing.git
+      branch: d11075cd40a88602bf4ba2b275f72100ddcb4767
+    lede-telephony:
+      uri: git://git.openwrt.org/feed/telephony.git
+      branch: ac6415e61f147a6892fd2785337aec93ddc68fa9
+    luci:
+      uri: git@gitlab.bo:x/luci.git
+    miner-feeds:
+      uri: git@gitlab.bo:x/braiins-miner-feeds.git
+    platform:
+      uri: git@gitlab.bo:x/{target}-io-bin.git
+      branch: braiins-s9
+    u-boot:
+      uri: git@gitlab.bo:x/u-boot-xlnx.git
+      branch: braiins-s9
+    linux:
+      uri: git@gitlab.bo:x/linux-xlnx.git
+      branch: braiins-s9
+    cgminer:
+      uri: git@gitlab.bo:x/cgminer.git
+    bmminer:
+      uri: git@gitlab.bo:x/bm-miner.git
+      branch: devel
+    # it is possible to continue with any user repositories
+
+local:
+  # list of output directories for local targets
+  sd: output/{platform}/sd/
+  sd_config: output/{platform}/sd/
+  sd_recovery: output/{platform}/sd_recovery/
+  sd_recovery_config: output/{platform}/sd_recovery/
+  nand_recovery: output/{platform}/nand_recovery/
+  nand_dm_v1: output/{platform}/nand_dm_v1/
+  nand_dm_v2: output/{platform}/nand_dm_v2/
+  feeds: output/{platform}/feeds/
+
+feeds:
+  # always create feeds.conf
+  create_always: no
+  # always update feeds
+  update_always: no
+  # always install feeds
+  install_always: no
+  # list of links to local feeds
+  links:
+    packages: '{build_dir}/lede-packages'
+    routing: '{build_dir}/lede-routing'
+    telephony: '{build_dir}/lede-telephony'
+    luci: '{build_dir}/luci'
+    miner: '{build_dir}/miner-feeds'
+
+uenv:
+  # boot Linux from SD instead of NAND
+  mac: yes
+  # reset firmware to factory settings
+  factory_reset: no
+  # use for factory reset images from SD
+  sd_images: no
+  # boot Linux from SD instead of NAND
+  sd_boot: no
+
+deploy:
+  # default targets
+  # some targets are aliases with predefined behaviour:
+  # * nand:
+  #  - selects targets 'nand_recovery' and 'nand_config'
+  #  - enables options 'write_miner_cfg', 'reset_uboot_env' and 'reboot'
+  # * local_sd:
+  #  - deploy SD images to local directory
+  #  - selects target 'local_sd_config'
+  # * local_sd_recovery:
+  #  - deploy SD recovery images to local directory
+  #  - selects target 'local_sd_recovery_config'
+  targets:
+#  - sd
+#  - sd_recovery
+#  - sd_config
+#  - nand
+#  - nand_recovery
+#  - nand_firmware1
+#  - nand_firmware2
+#  - nand_config
+  - local_sd
+  - local_sd_config
+  - local_sd_recovery
+  - local_sd_recovery_config
+  - local_nand_recovery
+  - local_nand_dm_v1
+  - local_nand_dm_v2
+  - local_feeds
+  # base file which is used for concatenation with new firmware meta information
+#  feeds_base: feeds/Packages
+  # use factory or sysupgrade image for formating/updating UBI partition
+  # for first load is needed factory image
+  # factory image swipes rootfs_data overlay!
+  factory_image: yes
+  # write FPGA bitstream to NAND
+  write_bitstream: no
+  # remove UUID from SD card
+  remove_extroot_uuid: no
+  # set U-Boot environment with miner configuration (MAC, HWID, firmware)
+  # it is useful for changing HWID when SD card is inserted
+  # SD card U-Boot cannot write to the NAND directly
+  set_miner_env: no
+  # overwrite NAND with new miner configuration (MAC, HWID)
+  # it is also necessary to reset uboot_env and overlay/extroot
+  write_miner_cfg: no
+  # erase U-Boot environment and set it to default one after reboot
+  reset_uboot_env: no
+  # erase NAND/UBI overlay (rootfs_data) and reinit it after reboot
+  # it is erased only overlay for current firmware (selected by miner.firmware)
+  reset_overlay: no
+  # erase SD card overlay and reinit it after reboot
+  reset_extroot: no
+  # reboot miner after successful deploy
+  reboot: no
+
+  # setting for deploy over SSH connection
+  ssh:
+    # ip address or hostname of remote miner
+    # when omitted then generated hostname 'miner-xxyyzz' is used
+    # where xxyyzz are last three numbers from MAC address
+#    hostname: 192.168.1.1
+    # hostname suffix which is appended to generated hostname
+    # it is not used when hostname is specified
+#    hostname_suffix: .bo
+    # ssh username
+    username: root
+    # ssh password
+    password:
