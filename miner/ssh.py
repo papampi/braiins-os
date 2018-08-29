@@ -74,7 +74,7 @@ class SSHManager:
         # at first try to login with ssh key
         try:
             self._client.connect(hostname=self._hostname, username=self._username, look_for_keys=True)
-        except paramiko.AuthenticationException:
+        except paramiko.SSHException:
             pass
         else:
             return self
