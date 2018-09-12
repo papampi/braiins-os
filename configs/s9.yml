@@ -77,7 +77,7 @@ remote:
       uri: git@gitlab.bo:x/cgminer.git
     bmminer:
       uri: git@gitlab.bo:x/bm-miner.git
-      branch: devel
+      branch: braiins
     # it is possible to continue with any user repositories
 
 local:
