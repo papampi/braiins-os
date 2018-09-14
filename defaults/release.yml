@@ -37,6 +37,7 @@ core:
     - uclient-fetch
     - uhttpd
     - uhttpd-mod-ubus
+    - zlib
 
 block_mount:
   list:

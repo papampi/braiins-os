@@ -75,6 +75,7 @@ remote:
       uri: git@gitlab.bo:x/linux-xlnx.git
     cgminer:
       uri: git@gitlab.bo:x/cgminer.git
+      branch: braiins-{subtarget_family}
     # it is possible to continue with any user repositories
 
 local:

@@ -85,7 +85,6 @@ class Builder:
     UBOOT = 'u-boot'
     LINUX = 'linux'
     CGMINER = 'cgminer'
-    BMMINER = 'bmminer'
     FEEDS_CONF = 'feeds.conf'
     FEEDS_DIR = 'feeds'
     CONFIG_NAME = '.config'
@@ -248,7 +247,6 @@ class Builder:
         ('CONFIG_FIRMWARE_VERSION', _write_firmware_version),
         ('CONFIG_EXTERNAL_KERNEL_TREE', partial(_write_external_path, repo_name=LINUX, name='kernel')),
         ('CONFIG_EXTERNAL_CGMINER_TREE', partial(_write_external_path, repo_name=CGMINER, name='CGMiner')),
-        ('CONFIG_EXTERNAL_BMMINER_TREE', partial(_write_external_path, repo_name=BMMINER, name='BMMiner')),
         ('CONFIG_EXTERNAL_UBOOT_TREE', partial(_write_external_path, repo_name=UBOOT, name='U-Boot')),
         # remove all commented CONFIG_TARGET_
         ('# CONFIG_TARGET_', None)
@@ -285,7 +283,8 @@ class Builder:
                 self._format_tags = {
                     'platform': platform,
                     'target': split_platform[0],
-                    'subtarget': split_platform[1]
+                    'subtarget': split_platform[1],
+                    'subtarget_family': split_platform[1].split('-')[0]
                 }
 
             def add_tag(self, name, value):
