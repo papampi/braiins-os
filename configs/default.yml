@@ -87,6 +87,7 @@ local:
   nand_recovery: output/{platform}/nand_recovery/
   nand_dm_v1: output/{platform}/nand_dm_v1/
   nand_dm_v2: output/{platform}/nand_dm_v2/
+  nand_dm_v3: output/{platform}/nand_am/
   feeds: output/{platform}/feeds/
 
 feeds:
@@ -142,6 +143,7 @@ deploy:
   - local_nand_recovery
   - local_nand_dm_v1
   - local_nand_dm_v2
+  - local_nand_am
   - local_feeds
   # base file which is used for concatenation with new firmware meta information
 #  feeds_base: feeds/Packages

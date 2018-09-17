@@ -34,7 +34,7 @@ BITSTREAM_DATA="system.bit.gz"
 KERNEL_IMAGE="fit.itb"
 STAGE2_FIRMWARE="stage2.tgz"
 
-function sed_variables() {
+sed_variables() {
     local value
     local args
     local input="$1"
@@ -62,7 +62,7 @@ nandwrite -ps ${SPL_OFF} /dev/mtd${UBOOT_MTD} "$SPL_IMAGE"
 nandwrite -ps ${UBOOT_OFF} /dev/mtd${UBOOT_MTD} "$UBOOT_IMAGE"
 nandwrite -ps ${BITSTREAM_OFF} /dev/mtd${UBOOT_MTD} "$BITSTREAM_DATA"
 
-flash_eraseall /dev/mtd${UBOOT_ENV_MTD}
+[ ${UBOOT_MTD} != ${UBOOT_ENV_MTD} ] && flash_eraseall /dev/mtd${UBOOT_ENV_MTD}
 
 echo "Writing U-Boot environment..."
 nandwrite -ps ${UBOOT_ENV1_OFF} /dev/mtd${UBOOT_ENV_MTD} "$UBOOT_ENV_DATA"

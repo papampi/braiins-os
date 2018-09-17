@@ -1,0 +1,46 @@
+# Copyright (C) 2018  Braiins Systems s.r.o.
+#
+# This file is part of Braiins Build System (BB).
+#
+# BB is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
+
+file_size() {
+	printf "0x%x" $(stat -c "%s" "$1")
+}
+
+ETHADDR=$(cat /sys/class/net/eth0/address)
+MINER_HWVER="S9"
+
+SPL_OFF=0x0
+UBOOT_OFF=0x80000
+UBOOT_ENV1_OFF=0x700000
+UBOOT_ENV2_OFF=0x720000
+BITSTREAM_OFF=0x300000
+
+UBOOT_MTD=0
+UBOOT_ENV_MTD=0
+
+if [ x${MINER_HWVER} != x${FW_MINER_HWVER} ]; then
+	echo "Unsupported miner version: ${MINER_HWVER}"
+	exit 1
+fi
+
+SRC_KERNEL_OFF=0x0000000
+DST_KERNEL_OFF=0xB000000
+SRC_STAGE2_OFF=0x0A00000
+DST_STAGE2_OFF=0x3D00000
+SRC_STAGE2_MTD=2
+DST_STAGE2_MTD=8

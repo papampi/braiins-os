@@ -116,7 +116,7 @@ class Builder:
 
     MTD_BITSTREAM = 'fpga'
 
-    DM_VERSIONS = 2
+    DM_VERSIONS = 3
     DM_DIR = 'upgrade_dm'
     DM_FIRMWARE_DIR = 'firmware'
     DM_UBOOT_ENV = 'uboot_env.bin'
@@ -1519,7 +1519,8 @@ class Builder:
 
         hwver = {
             'zynq-dm1-g9': 'G9',
-            'zynq-dm1-g19': 'G19'
+            'zynq-dm1-g19': 'G19',
+            'zynq-am1-s9': 'S9'
         }.get(self._config.miner.platform)
         info.write('FW_MINER_HWVER={}\n\n'.format(hwver).encode())
 
@@ -1571,13 +1572,28 @@ class Builder:
         upload_manager.target_dir = target_dir
 
         # copy upgrade script for deployment
-        if version == 2:
+        if version in [2, 3]:
             ssh = self._get_project_file(self.LEDE_META_DIR, self.LEDE_META_SSH)
             upload_manager.put(ssh, self.LEDE_META_SSH)
+
+        # copy U-Boot env tools
+        if version == 3:
+            upload_manager.target_dir = os.path.join(target_dir, 'system')
+            os.makedirs(upload_manager.target_dir, exist_ok=True)
+            build_dir = os.path.join(self._working_dir, 'build_dir', 'target-arm_cortex-a9+neon_musl-1.1.16_eabi')
+            upload_manager.put(os.path.join(build_dir, 'toolchain', 'ipkg-arm_cortex-a9_neon', 'libc', 'lib',
+                                            'ld-musl-armhf.so.1'), 'ld-musl-armhf.so.1')
+            upload_manager.put(os.path.join(build_dir, 'openssh-without-pam', 'openssh-7.4p1',
+                                            'sftp-server'), 'sftp-server')
+            upload_manager.put(os.path.join(build_dir, 'u-boot-2018.03', 'ipkg-arm_cortex-a9_neon', 'uboot-envtools',
+                                            'usr', 'sbin', 'fw_printenv'), 'fw_printenv')
+            upload_manager.target_dir = target_dir
+
         ssh = self._get_project_file(self.LEDE_META_DIR, self.LEDE_META_HWID)
         upload_manager.put(ssh, self.LEDE_META_HWID)
-        upgrade = self._get_project_file(self.DM_DIR, self.DM_UPGRADE_SCRIPT_SRC.format(version=version))
-        requirements = self._get_project_file(self.DM_DIR, self.DM_SCRIPT_REQUIREMENTS_SRC.format(version=version))
+        upgrade_ver = version if version != 3 else 2
+        upgrade = self._get_project_file(self.DM_DIR, self.DM_UPGRADE_SCRIPT_SRC.format(version=upgrade_ver))
+        requirements = self._get_project_file(self.DM_DIR, self.DM_SCRIPT_REQUIREMENTS_SRC.format(version=upgrade_ver))
         upload_manager.put(upgrade, self.DM_UPGRADE_SCRIPT)
         upload_manager.put(requirements, self.DM_SCRIPT_REQUIREMENTS)
 
@@ -1752,6 +1768,7 @@ class Builder:
         }
 
         nand_dm_versions = list('local_nand_dm_v{}'.format(version) for version in range(1, self.DM_VERSIONS + 1))
+        nand_dm_versions.append('local_nand_am')
         supported_targets.extend(nand_dm_versions)
 
         images_ssh = {}
@@ -1825,7 +1842,8 @@ class Builder:
                     factory=os.path.join(generic_dir, 'lede-{}-nand-squashfs-factory.bin'.format(platform))
                 )
                 for target in (target for target in nand_dm_versions if target in targets):
-                    images_local['nand_dm_v{}'.format(target.split('_v')[1])] = nand_dm
+                    version = target.split('_v')[1] if not target.endswith('_am') else 3
+                    images_local['nand_dm_v{}'.format(version)] = nand_dm
             if 'local_feeds' in targets:
                 feeds = ImageFeeds(
                     key=os.path.join(self._working_dir, self.BUILD_KEY_NAME),

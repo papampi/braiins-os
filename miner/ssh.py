@@ -17,6 +17,7 @@
 
 import paramiko
 import logging
+import shutil
 
 from contextlib import contextmanager
 from subprocess import CalledProcessError
@@ -189,6 +190,18 @@ class SSHManager:
 
         self._check_exit_status(cmd, stdout, stderr)
         return stdout, stderr
+
+    def put(self, local_path, remote_path):
+        """
+        Copy local file to remote server without SFTP server
+
+        :param local_path:
+            Path to local file.
+        :param remote_path:
+            Path to remote file.
+        """
+        with open(local_path, 'rb') as local, self.open(remote_path, 'w') as remote:
+            shutil.copyfileobj(local, remote)
 
     def open_sftp(self):
         """
