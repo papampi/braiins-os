@@ -126,6 +126,7 @@ class Builder:
     DM_MINER_CFG_CONFIG = 'miner_cfg.config'
     DM_UPGRADE_SCRIPT_SRC = 'upgrade_v{version}.py'
     DM_UPGRADE_SCRIPT = 'upgrade.py'
+    DM_RESTORE_SCRIPT = 'restore.py'
     DM_SCRIPT_REQUIREMENTS_SRC = 'requirements_v{version}.txt'
     DM_SCRIPT_REQUIREMENTS = 'requirements.txt'
     DM_STAGE1_CONTROL_SRC = 'CONTROL_v{version}'
@@ -1594,6 +1595,8 @@ class Builder:
         upgrade_ver = version if version != 3 else 2
         upgrade = self._get_project_file(self.DM_DIR, self.DM_UPGRADE_SCRIPT_SRC.format(version=upgrade_ver))
         requirements = self._get_project_file(self.DM_DIR, self.DM_SCRIPT_REQUIREMENTS_SRC.format(version=upgrade_ver))
+        restore = self._get_project_file(self.DM_DIR, self.DM_RESTORE_SCRIPT)
+        upload_manager.put(restore, self.DM_RESTORE_SCRIPT)
         upload_manager.put(upgrade, self.DM_UPGRADE_SCRIPT)
         upload_manager.put(requirements, self.DM_SCRIPT_REQUIREMENTS)
 
