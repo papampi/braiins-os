@@ -110,7 +110,7 @@ $ ./bb.py prepare --fetch
 
 ### Cleaning
 
-It is possible to clean all projects with two options. Simple execution of *clean* command runs the LEDE *make clean* to
+It is possible to clean all projects with two options. Simple execution of *clean* command runs the OpenWrt *make clean* to
 clean the whole build system. It does not guarantee that all files will be in its initial state.
 
 The second option uses git command to clean all repositories. The command after clean also runs initialization phase
@@ -118,7 +118,7 @@ again and prepares repository for its first build. This option removes all untra
 caution!
 
 ```bash
-# clean repositories with the LEDE make clean
+# clean repositories with the OpenWrt make clean
 $ ./bb.py clean
 
 # reset repositories with git clean
@@ -138,12 +138,12 @@ $ ./bb.py status
 
 ### Out-of-Tree Build
 
-Rather than executing the whole LEDE build system which can be slow, we can run a separate build of subproject (e.g.
-CGMiner) with the LEDE toolchain. Environment variables must be set correctly for using the LEDE toolchain in
+Rather than executing the whole OpenWrt build system which can be slow, we can run a separate build of subproject (e.g.
+CGMiner) with the OpenWrt toolchain. Environment variables must be set correctly for using the OpenWrt toolchain in
 out-of-tree projects. For this purpose, the *toolchain* command is provided.
 
 ```bash
-# set environment variables for LEDE toolchain out-of-tree use
+# set environment variables for OpenWrt toolchain out-of-tree use
 $ eval $(./bb.py toolchain 2>/dev/null)
 ```
 
@@ -155,7 +155,7 @@ important parameters without modifying the underlying configuration file.
 
 The configuration is divided into two categories. The first one is target specific configuration which is handled
 exclusively by the braiins build system and can be adjusted only in the YAML configuration. The second one is a package
-configuration used for image content description which is handled mainly in the LEDE menuconfig.
+configuration used for image content description which is handled mainly in the OpenWrt menuconfig.
 
 ### YAML Structure
 
@@ -186,7 +186,7 @@ The default configuration file is fully commented so the following list of globa
 
 * *miner* - the settings concerning one instance of miner (platform, MAC, HWID, default pool); default configuration is
   used only for testing and is usually overridden from command line during release process
-* *build* - the configuration of build process (path to LEDE configuration, build directories, keys, ...)
+* *build* - the configuration of build process (path to OpenWrt configuration, build directories, keys, ...)
 * *remote* - the list of all remote repositories with parameters for fetching; the parameters *fetch* and *branch* used
   as a default value for all repositories could be overridden in a specific repository by parameter of the same name
 * *local* - the configuration of output directories for local targets for deployment
@@ -217,7 +217,7 @@ The build system commands are described in detail in separate sections. Below is
 
 ### Packages
 
-The standard LEDE menuconfig is used for firmware image configuration. When some changes are detected, the difference in
+The standard OpenWrt menuconfig is used for firmware image configuration. When some changes are detected, the difference in
 configuration is saved to the file specified in *YAML* configuration file under *build.config* attribute.
 
 ```bash
@@ -228,7 +228,7 @@ $ ./bb.py config
 Multiple firmware images are being built at once (NAND, NAND Recovery, SD, ...). We must be specify which image will
 contain a particular package. It is done in two ways:
 
-- When a package is installed to all images without exception then only LEDE menuconfig is used where the package must
+- When a package is installed to all images without exception then only OpenWrt menuconfig is used where the package must
 be selected by asterisk symbol `<*>`
 - When a package is installed only to specific images then the package must be selected as a module `<M>` and added to
 an external package list specified in a *build.packages* attribute.
@@ -261,7 +261,7 @@ list_name:
 ### Kernel
 
 The *config* command can also be used for the Linux configuration when *--kernel* parameter is specified. The resulting
-configuration is then saved in the LEDE build system in the target directory. It is standard behavior of the LEDE.
+configuration is then saved in the OpenWrt build system in the target directory. It is standard behavior of the OpenWrt.
 
 ```bash
 # configure kernel (Linux) for selected target
@@ -270,8 +270,8 @@ $ ./bb.py config --kernel
 
 ## Deployment
 
-Whenever firmware images are built by the LEDE build system, it is possible to deploy them over ssh connection directly
-to the running miner (when it runs compatible firmware) or store it to a local path. The default configuration builds
+Whenever firmware images are built by the OpenWrt build system, it is possible to deploy them over ssh connection directly
+to the running machine (when it runs compatible firmware) or store it to a local path. The default configuration builds
 all local targets and stores its result to predefined location **output**/*\<platform\>*. It is convenient for testing
 when we want to verify all possible targets. However, for real deployment, it is more useful to specify a target from
 the command line.
@@ -280,9 +280,8 @@ the command line.
 
 *Do not confuse deployment process with the system upgrade!* The deployment is used mainly for developers for testing
 the firmware on running miner or for initial factory NAND programming. For system upgrade use standard firmware tarball
-which can be loaded with help of web interface or with LEDE *sysupgrade* utility.
-
-If you use standard braiins image then the following commands can be used for upgrading to the latest firmware:
+which can be loaded with help of web interface or with OpenWrt *sysupgrade* utility.
+Follow [user manual](docs/user-manual) for standard firmware upgrade procedure
 
 ```bash
 # download latest packages from feeds server
@@ -302,8 +301,8 @@ UBI partition is mounted. The following targets are supported:
 * *nand* - writes U-Boot and UBI image with the Linux kernel and a *SquashFS* root file system to the NAND (the writable
   overlay uses a *UBIFS* file system)
 
-Let's assume local network with one miner running braiins/LEDE firmware and default configuration of the build system.
-The following command can be used for deployment of SD or NAND image to this miner:
+Let's assume local network with one instance running braiins/OpenWrt firmware and default configuration of the build system.
+The following command can be used for deployment of SD or NAND image to this machine:
 
 ```bash
 # mount mmc0 partition 1 and copy all images and 'uEnv.txt' to it
@@ -343,8 +342,8 @@ the NAND or SD partition:
 
 Local targets can be used for deploying images to locations specified by a file path. The default configuration enables
 all local targets for storing all images to a predefined directory **output**/*\<platform\>*. There are also special
-local targets for deployment utilities used for upgrading the original firmware to the braiins/LEDE one. The other
-special target is for a feeds server preparation used for upgrading braiins/LEDE firmware with a standard LEDE *opkg*
+local targets for deployment utilities used for upgrading the original firmware to the braiins/OpenWrt one. The other
+special target is for a feeds server preparation used for upgrading braiins/OpenWrt firmware with a standard OpenWrt *opkg*
 utility. The following list specifies main local targets:
 
 * *local_sd* - the same function as remote target but target is specified by a local file path
@@ -352,7 +351,7 @@ utility. The following list specifies main local targets:
   'bricked' miner)
 * *local_nand_dm_v1* - scripts and images needed for upgrading an original DragonMint firmware
 * *local_nand_dm_v2* - scripts and images needed for upgrading an improved DragonMint firmware (Kolivas)
-* *local_feeds* - sysupgrade tarball with current firmware and packages needed for creating standard LEDE feeds server
+* *local_feeds* - sysupgrade tarball with current firmware and packages needed for creating standard OpenWrt feeds server
 
 Similarly to the remote targets there are also *configuration* targets:
 
@@ -393,7 +392,7 @@ $ ./bb.py deploy local_sd_config:/mnt/mmc0 --uenv factory_reset
 
 When U-Boot finds inserted SD card it tries to load a file *uEnv.txt* from its first partition formatted with FAT
 file system. There are environment variables which can alter U-Boot behavior during boot process. There are
-standard U-Boot variables (e.g. ethaddr) and some additional ones are provided by braiins/LEDE firmware. Configuration of these
+standard U-Boot variables (e.g. ethaddr) and some additional ones are provided by braiins/OpenWrt firmware. Configuration of these
 variables can be done in the braiins build system YAML file in *uenv* section. These parameters can also be passed by
 command line argument *--uenv*. The following list shows all supported settings:
 
@@ -449,7 +448,7 @@ The *release* command has also *--include* argument which is used for specificat
 content. In a special situation that a new firmware needs to upgrade also a U-Boot or a FPGA
 bitstream. Occasionally, a bash script (*COMMAND*) can also be added. It is run before in pre-init phase of the
 standard system upgrade process. It can contain some control checks or fixes of previous firmware running on a
-miner. The source code of this script is stored in the LEDE repository but must be configured externally that it is
+miner. The source code of this script is stored in the OpenWrt repository but must be configured externally that it is
 included to the output image. The following list contains all sysupgrade components supported by the firmware:
 
 * *command* - bash script executed during firmware system upgrade
