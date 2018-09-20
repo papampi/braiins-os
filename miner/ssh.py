@@ -24,6 +24,7 @@ from subprocess import CalledProcessError
 from collections import namedtuple
 from getpass import getpass
 
+logging.getLogger("paramiko").setLevel(logging.CRITICAL)
 
 class SSHClient(paramiko.SSHClient):
     """
