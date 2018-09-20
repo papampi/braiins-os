@@ -93,7 +93,7 @@ class SSHManager:
             try:
                 self._client.close()
                 self._client.connect(hostname=self._hostname, username=self._username, password=password,
-                                     look_for_keys=False)
+                                     look_for_keys=False, allow_agent=False)
             except paramiko.AuthenticationException:
                 # prompt the user when everything fails
                 password = getpass()
