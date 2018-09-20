@@ -17,7 +17,7 @@ miner:
 build:
   # name of subdirectory in the build directory
   name: '{target}'
-  # file with default LEDE configuration
+  # file with default OpenWrt configuration
   config: defaults/release.conf
   # file with list of packages for build images
   packages: defaults/release.yml
@@ -33,7 +33,7 @@ build:
   jobs: 4
   # show all commands during build process
   verbose: no
-  # target aliases for LEDE build system
+  # target aliases for OpenWrt build system
   aliases:
     kernel: target/linux
     cgminer: package/utils/cgminer
