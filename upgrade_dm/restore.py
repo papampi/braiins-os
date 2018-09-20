@@ -33,7 +33,7 @@ PASSWORD = None
 
 RECOVERY_MTDPARTS = 'recovery_mtdparts='
 
-REBOOT_DELAY = (3, 3)
+REBOOT_DELAY = (3, 8)
 
 
 def get_mtdpart_size(value):
