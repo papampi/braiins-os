@@ -12,7 +12,7 @@
 parallel_jobs=32
 # default target is zynq
 target=zynq
-git_repo=http://gitlab.bo/x/braiins-os
+git_repo=git@gitlab.bo:x/braiins-os
 
 key=`realpath $1`
 shift
