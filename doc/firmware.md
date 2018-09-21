@@ -1,6 +1,6 @@
 # braiins OS Firmware
 
-## MTD Partitons (NAND)
+## MTD Partitions (NAND)
 
 | Dev           | Address               | Size       | Name      |
 |:-------------:|:---------------------:|:----------:| --------- |
@@ -93,7 +93,7 @@ also used during factory reset.
 
 ### firmware
 
-An *UBI* partition with threed dynamic partitions contains a Linux kernel, read-only root file system and writable
+An *UBI* partition with three dynamic partitions contains a Linux kernel, read-only root file system and writable
 overlay. There are actually two partitions. Only one partition is active. This partition always contains functional
 version of firmware and is used during auto recovery process.
 
@@ -120,8 +120,8 @@ The normal mode is signaled by **solid green LED** on the front panel. The **red
 following meaning:
 
 * **on** - *cgminer* or *cgminer_monitor* are not running
-* **slow flashing** - hashrate is bellow 80% of expected hashrate
-* **off** - *cgminer* running and hashrate above 80% of expected hashrate
+* **slow flashing** - hash rate is bellow 80% of expected hash rate
+* **off** - *cgminer* running and hash rate above 80% of expected hash rate
 * **fast flashing** - LED override requested by user (`miner fault_light on`)
 
 ## SD Boot
