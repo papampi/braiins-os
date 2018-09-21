@@ -8,7 +8,7 @@ It is recommended to test the hardware with an SD card image before flashing the
 # Common steps
 
 Download the latest released firmware images + signatures from:
-https://github.com/braiins/braiins-os-releases/releases/latest
+https://github.com/braiins/braiins-os-releases/path-to-binary-folder-with-latest-releases
 
 
 The table below outlines correspondence between firmware image archive and a particular hardware type.
@@ -35,45 +35,60 @@ for i in  ./braiins-os-firmware_*.tar.bz2; do tar xvjf $i; done
 The downloaded firmware image contains SD card components as well has a transitional firmware that can be flashed into device's on-board flash memory.
 
 
-# Testing SD card image
+# Testing SD card image  (Antminer S9i example)
 
+Insert an empty SD card into your reader and identify its block device (e.g. by ```lsblk```). You need an SD card with minimum capacity of 32 MB.
 
-Before built-in flash memoryproceeding further it is recommended to verify that your mining hardware works as expe
+```
+cd braiins-os-firmware_am1-s9-latest;
+sudo dd if=sd.img of=/dev/your-sd-card-block-device
+sync
+```
+
+## Adjusting MAC address
+If you know the MAC address of your device, mount the SD card and adjust the MAC address. in ```uEnv.txt``` (most desktop Linux systems have automount capabilities once you reinsert the card into your reader). The ```uEnv.txt``` is environment for the bootloader and resides in the first (FAT) partition of the SD card. That way, once the device boots with braiins OS, it would have the same IP address as it had with the factory firmware.
+
+## Booting the device from SD card
+- Unmount the SD card
+- Adjust jumper to boot from SD card (instead of flash memory):
+   - [Antminer S9](s9#bootmode)
+   - [Dragon Mint T1][dm1#bootmode)
+- Insert it into the device and start the device. You should see a login screen shortly.
 
 
 # Migrating from factory firmware to Braiins OS
 
-The trans
+Once the SD card works, it is very safe to attempt flashing the built-in flash memory as there will always be a way to recover the factory firmware.
+Follow the steps below. The tool creates a backup of the original firmware in the ```backup``` folder
 
-```
+Below are steps to replace original factory firmware with braiins OS. The tool attempts to login to the machine via ssh, therefore you maybe prompted for a password.
 
+```bash
+cd braiins-os-firmware_am1-s9-latest/factory-transition
 virtualenv --python=/usr/bin/python3 .env
 source .env/bin/activate
 pip install -r ./requirements.txt
 
-Below are steps to perform remote upgrade of your factory
-```
-python3 upgrade.py your-miner-hostname-or-ip
+python3 upgrade2bos.py your-miner-hostname-or-ip
 ```
 
 # Migrating from Braiins OS to factory firmware
-```
-python3 restore.py backup/2ce9c4aab53c-2018-09-19/ 10.33.0.172
+
+Restoring the original factory firmware requires issuing the command below. Please, note that the previously created backup needs to be available.
+
+```bash
+python3 restore2factory.py backup/2ce9c4aab53c-2018-09-19/ your-miner-hostname-or-ip
 ```
 
 # Recovering bricked (unbootable) devices using SD card
 
-Download SD card image and unpack all files to a dedicated partition.
-Most boards boot from NAND flash by default. In case of recovery of bricked devices or testing experimental firmwares, it may be desirable to switch to SD card boot.
+If anything goes wrong and your device seems unbootable, you can use the previously created SD card image to recover it:
 
-Adjust jumper to boot from SD card (instead of flash memory):
-- [Antminer S9](s9#bootmode)
-- [Dragon Mint T1][dm1#bootmode)
-
-Important use:
-
+- Follow the steps in *Testing SD card image* to boot the device
+- Run:
 ```
-python3 restore.py --sd-recovery backup/2ce9c4aab53c-2018-09-19/ 10.33.0.172
+cd braiins-os-firmware_am1-s9-latest/factory-transition
+python3 restore.py --sd-recovery backup/2ce9c4aab53c-2018-09-19/ your-miner-hostname-or-ip
 ```
 
 # Firmware upgrade
