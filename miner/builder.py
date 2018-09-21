@@ -2017,9 +2017,12 @@ class Builder:
 
         logging.debug("Creating new release commit...")
         repo_meta.index.add([self.DEFAULT_CONFIG])
-        repo_meta.index.commit("Firmware release commit")
+        repo_meta.index.commit("[{}] Release "
+                               "Firmware".format(self._config.miner.platform))
 
-        fw_version = '{}_{}'.format(self.FEED_FIRMWARE, self._get_firmware_version())
+        fw_version = '{}_{}_{}'.format(self.FEED_FIRMWARE,
+                                       self._config.miner.platform,
+                                       self._get_firmware_version())
         logging.info("Creating new release tag '{}'...".format(fw_version))
         repo_meta.create_tag(fw_version)
         repo_meta.remotes.origin.push(fw_version)
