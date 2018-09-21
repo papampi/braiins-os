@@ -20,8 +20,8 @@ date_and_patch_level=$1
 shift
 release_subtargets=$@
 
-DRY_RUN=echo
-STAGE1=n
+#DRY_RUN=echo
+STAGE1=y
 
 echo KEY is: $key
 echo targets are: $@
