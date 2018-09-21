@@ -45,7 +45,7 @@ class SSHManager:
     """
     SSH Manager simplifies file operations and command running
     """
-    def __init__(self, hostname: str, username: str, password: str):
+    def __init__(self, hostname: str, username: str, password: str, load_host_keys: bool=True):
         """
         Initialize SSH client with server name and information for authentication
 
@@ -55,14 +55,18 @@ class SSHManager:
             The username to authenticate as.
         :param password:
             A password to use for authentication.
+        :param load_host_keys:
+            Load known host keys from the system to check connection.
         """
         self._client = SSHClient()
         self._hostname = str(hostname)
         self._username = str(username)
         self._password = str(password)
 
-        logging.debug("Loading system host keys...'")
-        self._client.load_system_host_keys()
+        if load_host_keys:
+            logging.debug("Loading system host keys...'")
+            self._client.load_system_host_keys()
+
         self._client.set_missing_host_key_policy(paramiko.WarningPolicy())
 
     def __enter__(self):

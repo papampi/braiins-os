@@ -119,7 +119,8 @@ def main(args):
         wait_for_reboot(args.hostname, REBOOT_DELAY)
 
     print("Connecting to remote host...")
-    with SSHManager(args.hostname, USERNAME, PASSWORD) as ssh:
+    # do not use host keys because recovery mode has different keys for the same MAC
+    with SSHManager(args.hostname, USERNAME, PASSWORD, load_host_keys=False) as ssh:
         for dev, size, name in mtdparts:
             print('Restore {} ({})'.format(dev, name))
             dump_path = os.path.join(args.backup_dir, dev + '.bin')
