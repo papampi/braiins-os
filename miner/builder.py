@@ -1521,9 +1521,9 @@ class Builder:
         hwver = {
             'zynq-dm1-g9': 'G9',
             'zynq-dm1-g19': 'G19',
-            'zynq-am1-s9': 'S9'
+            'zynq-am1-s9': 'Antminer S9i'
         }.get(self._config.miner.platform)
-        info.write('FW_MINER_HWVER={}\n\n'.format(hwver).encode())
+        info.write('FW_MINER_HWVER="{}"\n\n'.format(hwver).encode())
 
         with open(control_path, 'rb') as control_file:
             shutil.copyfileobj(control_file, info)

@@ -32,8 +32,8 @@ BITSTREAM_OFF=0x300000
 UBOOT_MTD=0
 UBOOT_ENV_MTD=3
 
-if [ x${MINER_HWVER} != x${FW_MINER_HWVER} ]; then
-	echo "Unsupported miner version: ${MINER_HWVER}"
+if [ "x${MINER_HWVER}" != "x${FW_MINER_HWVER}" ]; then
+	echo "Unsupported miner version: ${MINER_HWVER}" >&2
 	exit 1
 fi
 
@@ -52,6 +52,6 @@ elif [ x${ROOTFS_FLAG} == x"b" ]; then
 	SRC_STAGE2_MTD=4
 	DST_STAGE2_MTD=7
 else
-	echo "Unsupported rootfs flag: ${ROOTFS_FLAG}"
+	echo "Unsupported rootfs flag: ${ROOTFS_FLAG}" >&2
 	exit 1
 fi
