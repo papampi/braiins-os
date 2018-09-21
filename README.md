@@ -351,6 +351,7 @@ utility. The following list specifies main local targets:
   'bricked' miner)
 * *local_nand_dm_v1* - scripts and images needed for upgrading an original DragonMint firmware
 * *local_nand_dm_v2* - scripts and images needed for upgrading an improved DragonMint firmware (Kolivas)
+* *local_nand_am* - scripts and images needed for upgrading Antminer S9 factory firmware
 * *local_feeds* - sysupgrade tarball with current firmware and packages needed for creating standard OpenWrt feeds server
 
 Similarly to the remote targets there are also *configuration* targets:
