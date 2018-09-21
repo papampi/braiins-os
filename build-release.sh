@@ -6,8 +6,7 @@
 # - and generates scripts for packaging and signing the resulting build of
 #
 #
-
-# Synopsis: ./make-release.sh KEYRINGSECRET RELEASE SUBTARGET1 [SUBTARGET2 [SUBTARGET3...]]
+# Synopsis: ./build-release.sh KEYRINGSECRET RELEASE SUBTARGET1 [SUBTARGET2 [SUBTARGET3...]]
 
 #
 parallel_jobs=32
