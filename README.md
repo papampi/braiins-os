@@ -1,15 +1,13 @@
-# Braiins Build System (BB) of Miner Firmware
+# Braiins OS Developer Guide
 
-The braiins build system is based on the LEDE build system and it is only wrapper around this system.
-
-It extends the LEDE build system with following features:
+This project is build around a small tool (braiins build system - bb.py) that extends the OpenWrt build system with following features:
 
 * automatic clone/pull of all repositories
 * switching between several configurations
 * out-of-tree repositories for development
 * status of all developed repositories
 * cleaning and purging repositories
-* setup environment for using the LEDE toolchain in external projects
+* setup environment for using the OpenWrt toolchain in external projects
 * firmware deployment to NAND/SD over ssh connection or to local repository
 * release version control and firmware signing
 * preparation of feed server with firmware updates
@@ -21,7 +19,7 @@ purposes. See deployment for notes on how to deploy the project on a live system
 
 ### Prerequisites
 
-The Miner build system is written for *Python 3.5*. The only prerequisites are:
+The build system is written for *Python 3.5*. The only prerequisites are:
 
 * Python 3.5.x
 * virtualenv 15.x.x
@@ -32,9 +30,9 @@ The Miner build system is written for *Python 3.5*. The only prerequisites are:
 Clone git repository to some directory and setup system environment:
 
 ```bash
-# clone braiins build system from git
-$ git clone <repo> miner
-$ cd miner
+# clone braiins OS from git
+$ git clone https://github.com/braiins/braiins-os.git
+$ cd braiins-os
 $ virtualenv --python=/usr/bin/python3.5 .env
 $ source .env/bin/activate
 $ pip3 install -r requirements.txt
@@ -42,7 +40,7 @@ $ pip3 install -r requirements.txt
 
 ## Building
 
-For building firmware image with default configuration it can be simply called *bb.py* script with *build* command.
+Building firmware image with default configuration is very simple. Just call the *bb.py* script with *build* command.
 
 ```bash
 # build firmware image with default configuration
@@ -57,9 +55,10 @@ under a *build.name* attribute.
 
 ### Platform Selection
 
-The braiins build system supports multiple targets with the same base configuration. Currently the following platforms
+The build system supports multiple platforms with the same base configuration. Currently the following platforms
 are supported:
 
+* *zynq-am1-s9* (Antminer S9)
 * *zynq-dm1-g9* (DragonMint v1 with G9 Control Board)
 * *zynq-dm1-g19* (DragonMint v1 with G19 Control Board)
 
@@ -77,7 +76,7 @@ $ ./bb.py --config configs/user.yml --platform zynq-dm1-g19 build
 ### Firmware Release
 
 The firmware with specific version has tag in a git repository which contains modified configuration set to exact commit
-of all dependent repositories. The tag can be checked out for specific firmware version then we can call *build* command
+of all dependent repositories. The tag can be checked out for specific firmware version. Afterwards, we can call *build* command
 for reproducible firmware release.
 
 ### Signing
@@ -127,9 +126,8 @@ $ ./bb.py clean --purge
 
 ### Status
 
-The whole miner project consists of several git repositories and during development is convenient to track status of all
-changes in all repositories at once. The *status* command can be used for this purpose. It is similar to git status but
-it is executed for all repositories.
+The braiins OS project consists of several git repositories. It is convenient to track status of all changes in all repositories at once
+during development. The *status* command can be used for this purpose. It is similar to git status but it is executed for all repositories.
 
 ```bash
 # get status of all repositories
@@ -147,9 +145,10 @@ out-of-tree projects. For this purpose, the *toolchain* command is provided.
 $ eval $(./bb.py toolchain 2>/dev/null)
 ```
 
+
 ## Configuration
 
-The braiins build system supports multiple configurations specified by a configuration file stored in a YAML format. The
+The build system supports multiple configurations specified by a configuration file stored in a YAML format. The
 current configuration can be changed from a command line. From the command line, it is also possible to alter the most
 important parameters without modifying the underlying configuration file.
 
@@ -168,10 +167,12 @@ name of parameter for expansion is enclosed in *{}* and can be used anytime in t
 parameters is following:
 
 * *platform* - the name defined in a *miner.platform* attribute (it has form *\<target\>-\<subtarget\>*)
-* *target* - the name of target architecture (e.g. *zynq*)
-* *subtarget* - the name of target device (e.g. *dm1-g19*)
+* *target* - the name of target architecture (e.g. *zynq*) that is derived from *miner.platform* attribute
+* *subtarget* - the name of target device (e.g. *dm1-g19*) that is derived from *miner.platform* attribute
+* *subtarget_family* - the name of the family of the subtarget (e.g. *dm1*) that is derived from *miner.platform*
+* *build_dir* - build directory e.g. *build/\<target\>*
 
-The curly bracket is also used by the YAML for dictionary in an abbreviated form and when string starts with the curly
+Curly bracket is also used by the YAML for dictionary in an abbreviated form and when string starts with the curly
 bracket then it must be quoted to distinguish meaning:
 
 ```yaml
@@ -207,11 +208,11 @@ The build system commands are described in detail in separate sections. Below is
 
 * *prepare* - fetch all remote repositories and prepare source directory
 * *clean* - clean source directory
-* *config* - change default configuration of LEDE project
+* *config* - change default configuration of OpenWrt project
 * *build* - build image for current configuration
 * *deploy* - deploy selected image to target device (NAND/SD over ssh or to local directory)
 * *status* - show status of all local repositories (*git status* equivalent)
-* *toolchain* - set environment for LEDE toolchain (out-of-tree build)
+* *toolchain* - set environment for OpenWrt toolchain (out-of-tree build)
 * *release* - create branch with configuration for release version
 * *key* - generate build key pair for signing firmware tarball and packages
 
@@ -294,7 +295,7 @@ $ opkg install firmware
 
 Only commonly used remote targets will be described here. Special targets, useful during development of specific
 firmware parts, will be omitted. With remote targets, it is possible to deploy either NAND image or SD image (in case
-that the SD card is inserted into the SD slot). The NAND image can be deployed even if the miner is run from NAND and a
+that the SD card is inserted into the SD slot). The NAND image can be deployed even if the braiins OS is run from NAND and a
 UBI partition is mounted. The following targets are supported:
 
 * *sd* - writes U-Boot and Linux image with a *SquashFS* root file system to the SD card
@@ -312,16 +313,16 @@ $ ./bb.py deploy sd
 $ ./bb.py deploy nand
 ``` 
 
-When more than one miner needs to be managed, several arguments can be used to specify remote miner. It can be done only
-by miner MAC address specification or even with a hostname when local DNS server does not work correctly or when the MAC
+When more than one device needs to be managed, several arguments can be used to specify remote machine. It can be done only
+by machine's MAC address specification or even with a hostname when local DNS server does not work correctly or when the MAC
 address does not correspond with the hostname.
 
-*But be very cautious with MAC address!* Even if parameter *--mac* is omitted the default MAC address from configuration
-file is used (`00:0A:35:FF:FF:FF`) and remote miner is upgraded with it. Therefore, it is recommended to use hostname
+*Be very cautious with MAC address!* If the *--mac* parameter is omitted, the default MAC address from configuration
+file is used (`00:0A:35:FF:FF:FF`) and remote machine is upgraded with it. Therefore, it is recommended to use hostname
 only in situations when miners MAC address needs to be changed.
 
-The miners hostname is determined from MAC address when not specified. The miner generates its name based on current MAC
-in a form of `miner-xxyyzz` where `xxyyzz` are last three numbers from this address.
+The hostname is determined from MAC address when not specified. The machine generates its name based on current MAC in a form of
+`{MACHINE_CLASS}-xxyyzz` where `MACHINE_CLASS` is e.g. `miner` and `xxyyzz` are last three numbers from its address.
 
 ```bash
 # upgrade remote miner with the hostname 'miner-ffff01'
@@ -347,8 +348,8 @@ special target is for a feeds server preparation used for upgrading braiins/Open
 utility. The following list specifies main local targets:
 
 * *local_sd* - the same function as remote target but target is specified by a local file path
-* *local_sd_recovery* - writes special SD recovery image to a local file path (it can be used for repairing a
-  'bricked' miner)
+* *local_sd_recovery* - writes special SD recovery image to a local file path (e.g. it can be used for repairing a
+  'bricked' machine that doesn't boot from its flash memory anymore)
 * *local_nand_dm_v1* - scripts and images needed for upgrading an original DragonMint firmware
 * *local_nand_dm_v2* - scripts and images needed for upgrading an improved DragonMint firmware (Kolivas)
 * *local_nand_am* - scripts and images needed for upgrading Antminer S9 factory firmware
@@ -493,7 +494,7 @@ reproduced anytime in the feature.
 
 ### Feeds Server
 
-The final stage of release management is publishing to the feeds server. It is standard LEDE feeds server with the
+The final stage of release management is publishing to the feeds server. It is standard OpenWrt feeds server with the
 *Packages.gz* file containing list of *ipk* packages in a text format. All files needed for this feed server can be
 created by *deploy* command with *local_feeds* target:
 
@@ -515,27 +516,23 @@ All generated files are described in the following list:
 * **firmware_\<version\>.tar** - signed tarball with all images for miner system upgrade compatible with *sysupgrade*
   utility or LuCI web interface (this file can be used directly without *OPKG* utility)
 * **firmware_\<version\>.ipk** - standard *OPKG* package with firmware metadata used for installing new firmware<br>
-  (it downloads correspondent *firmware_\<version\>.tar* from feeds server and initiate system upgrade)
+  (it downloads corresponding *firmware_\<version\>.tar* from feeds server and initiate system upgrade)
 * **Packages** - feeds index file with a list of all packages in a text form<br>
   (it contains references to *firmware_\<version\>.tar*)
 * **Packages.gz** - gzipped *Packages* file
-* **Packages.sig** - the file with a sign of *Packages.gz*
+* **Packages.sig** - the file that contains signature for *Packages.gz*
 
-## Upgrade from Original Firmware
+## Upgrade from Original/Factory Firmware
 
-A DragonMint miner with the original firmware can be upgraded with the following commands:
+The example below for Dragon Mint DM1 shows how to upgrade the factory firmware to braiins OS firmware:
 
 ```bash
 # create stage1 upgrade script and all required images for new DragonMint with G19 control board
 $ ./bb.py deploy local_nand_dm_v2:~/nand_dm_v2
 
-# run generated upgrade script from local host and initiate stage1 upgrade over ssh connection
+# run generated upgrade script from local host and initiate upgrade over ssh connection
 $ cd ~/nand_dm_v2
 $ python3 ./upgrade.py 192.168.0.1
-
-# connect to newly upgraded miner and run final stage2 upgrade
-$ ssh root@192.168.0.1
-$ miner_upgrade.sh
 ```
 
 There exists two versions of original firmware and appropriate target for deploy should be used:

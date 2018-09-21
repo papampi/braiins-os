@@ -1,4 +1,4 @@
-# braiins/LEDE Miner Firmware
+# braiins OS Firmware
 
 ## MTD Partitons (NAND)
 
@@ -132,7 +132,7 @@ line **sd_boot=yes** then the U-Boot tries to load FIT image from SD card. *Howe
 
 ## Firmware Upgrade
 
-First method is to used an *opkg* utility which use feeds server with a firmware meta-package:
+The first method is to use an *opkg* utility. It downloads firmware meta-package from the feeds server:
 
 ```bash
 # download latest packages from feeds server
