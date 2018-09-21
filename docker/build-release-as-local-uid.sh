@@ -3,7 +3,8 @@
 
 addgroup --gid=$LOC_GID build
 adduser --system --home=$RELEASE_BUILD_DIR --no-create-home --uid=$LOC_UID --gid=$LOC_GID build
-sudo -E -u build bash << EOF
-export HOME=$RELEASE_BUILD_DIR
+# release build is already created due to the fact that we have mapped into it .ssh with known hosts file
+chown build.build $RELEASE_BUILD_DIR
+sudo -H -E -u build bash << EOF
 ./build-release.sh $@
 EOF
