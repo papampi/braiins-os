@@ -3,6 +3,6 @@
 
 addgroup --gid=$LOC_GID build
 adduser --system --home=/ --no-create-home --uid=$LOC_UID --gid=$LOC_GID build
-su build <<EOSU
+sudo -u build bash << EOF
 ./build-release.sh $@
-EOSU
+EOF
