@@ -7,7 +7,7 @@
 #
 #
 # Synopsis: ./build-release.sh KEYRINGSECRET RELEASE SUBTARGET1 [SUBTARGET2 [SUBTARGET3...]]
-
+set -e
 #
 parallel_jobs=32
 # default target is zynq
@@ -33,7 +33,7 @@ $DRY_RUN mkdir -p $RELEASE_BUILD_DIR
 $DRY_RUN cd $RELEASE_BUILD_DIR
 
 if [ $STAGE1 = y ]; then
-    $DRY_RUN git clone $git_repo || exit 1
+    $DRY_RUN git clone $git_repo
 fi
 
 # Prepare build environment
@@ -73,12 +73,12 @@ for subtarget in $release_subtargets; do
     esac
     $DRY_RUN git checkout $tag
     # We need to ensure that feeds are update
-    $DRY_RUN ./bb.py --platform $platform prepare || exit 1;
-    $DRY_RUN ./bb.py --platform $platform prepare --update-feeds || exit 1;
+    $DRY_RUN ./bb.py --platform $platform prepare
+    $DRY_RUN ./bb.py --platform $platform prepare --update-feeds
 
-    $DRY_RUN ./bb.py --platform $platform build --key $key -j$parallel_jobs || exit 1;
+    $DRY_RUN ./bb.py --platform $platform build --key $key -j$parallel_jobs
     for i in feeds sd nand_$nand; do
-	$DRY_RUN ./bb.py --platform $platform deploy local_$i || exit 1;
+	$DRY_RUN ./bb.py --platform $platform deploy local_$i
     done
     # Make local adjustments to directory structure
     ($DRY_RUN cd output/;
