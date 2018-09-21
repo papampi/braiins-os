@@ -23,14 +23,17 @@ release_subtargets=$@
 #DRY_RUN=echo
 STAGE1=y
 
+echo ID is: `id`
 echo KEY is: $key
-echo targets are: $@
+echo RELEASE_BUILD_DIR is: $RELEASE_BUILD_DIR
+echo DATE and PATCH LEVEL: $date_and_patch_level
+echo RELEASE SUBTARGETS: $release_subtargets
 
 $DRY_RUN mkdir -p $RELEASE_BUILD_DIR
 $DRY_RUN cd $RELEASE_BUILD_DIR
 
 if [ $STAGE1 = y ]; then
-    $DRY_RUN git clone $git_repo
+    $DRY_RUN git clone $git_repo || exit 1
 fi
 
 # Prepare build environment
