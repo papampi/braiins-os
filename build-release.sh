@@ -26,8 +26,8 @@ STAGE1=y
 echo KEY is: $key
 echo targets are: $@
 
-$DRY_RUN mkdir -p release
-$DRY_RUN cd release
+$DRY_RUN mkdir -p $RELEASE_BUILD_DIR
+$DRY_RUN cd $RELEASE_BUILD_DIR
 
 if [ $STAGE1 = y ]; then
     $DRY_RUN git clone $git_repo
