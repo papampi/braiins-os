@@ -93,6 +93,15 @@ class SSHManager:
             try:
                 self._client.close()
                 self._client.connect(hostname=self._hostname, username=self._username, password=password,
+                                     look_for_keys=False)
+            except paramiko.SSHException:
+                # login with ssh agent may fail so try another attempt without it
+                pass
+            else:
+                return self
+            try:
+                self._client.close()
+                self._client.connect(hostname=self._hostname, username=self._username, password=password,
                                      look_for_keys=False, allow_agent=False)
             except paramiko.SSHException:
                 # prompt the user when everything fails
