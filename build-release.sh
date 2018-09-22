@@ -86,17 +86,19 @@ for subtarget in $release_subtargets; do
     ($DRY_RUN cd output/;
      factory_fw=factory_transition;
      $DRY_RUN mv $platform $fw_prefix;
-     $DRY_RUN cd $fw_prefix;
-     $DRY_RUN mv nand_$nand $factory_fw;
-     $DRY_RUN cd $factory_fw;
-     $DRY_RUN mv upgrade.py upgrade2bos.py;
-     $DRY_RUN mv restore.py restore2factory.py
+     ($DRY_RUN cd $fw_prefix;
+      $DRY_RUN mv nand_$nand $factory_fw;
+      ($DRY_RUN cd $factory_fw;
+       $DRY_RUN mv upgrade.py upgrade2bos.py;
+       $DRY_RUN mv restore.py restore2factory.py
+      )
+     )
+     pack_and_sign_script=pack-and-sign-$fw_prefix.sh
+     fw_archive=$fw_prefix.tar.bz2
+     generate_sd_img $fw_prefix > $pack_and_sign_script;
+     echo tar cvjf $fw_archive $fw_prefix --exclude feeds --exclude sd >> $pack_and_sign_script
+     echo gpg2 --armor --detach-sign --sign-with release@braiins.cz --sign ./$fw_archive >> $pack_and_sign_script
     )
 
-     pack_and_sign_script=pack-and-sign-$fw_prefix.sh
-     generate_sd_img $fw_prefix > $pack_and_sign_script;
-     echo tar cvjf $fw_prefix.tar.bz2 $fw_prefix --exclude feeds --exclude sd >> $pack_and_sign_script
-
-     echo gpg2 --armor --detach-sign --sign-with release@braiins.cz --sign ./$fw_prefix.tar.bz2 >> $pack_and_sign_script
 
 done
