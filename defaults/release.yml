@@ -72,8 +72,5 @@ image_recovery:
     - miner_recovery
 
 image_upgrade:
-  base:
-    - core
-    - block_mount
   list:
     - miner_upgrade
