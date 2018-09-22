@@ -80,12 +80,26 @@ for subtarget in $release_subtargets; do
     # build everything for a particular platform
     $DRY_RUN ./bb.py --platform $platform build --key $key -j$parallel_jobs -v
 
-    $DRY_RUN ./bb.py --platform $platform build --key $key -j$parallel_jobs
-    for i in feeds sd nand_$nand; do
-	$DRY_RUN ./bb.py --platform $platform deploy local_$i
+    # Deploy SD and NAND images
+    for i in sd nand_$nand; do
+	$DRY_RUN ./bb.py --platform $platform deploy local_$i --pool-user !non-existent-user!
     done
+
+    # Feeds deploy is specially handled as it has to merge with firmware packages
+    output_dir=output
+    publish_dir=$output_dir/publish/$platform
+    packages=$publish_dir/Packages
+    if [ -f $packages ]; then
+	echo Detected existing publish directory for $platform merging Packages...
+	extra_feeds_opts="--feeds-base $packages"
+    else
+	echo Nothing has been published for $platform, skipping merge of Packages...
+	extra_feeds_opts=
+    fi
+    $DRY_RUN ./bb.py --platform $platform deploy local_feeds $extra_feeds_opts --pool-user !non-existent-user!
+
     # Make local adjustments to directory structure
-    ($DRY_RUN cd output/;
+    ($DRY_RUN cd $output_dir;
      factory_fw=factory_transition;
      $DRY_RUN mv $platform $fw_prefix;
      ($DRY_RUN cd $fw_prefix;
