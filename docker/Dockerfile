@@ -20,4 +20,7 @@ RUN apt-get update && apt-get install -y \
 RUN apt-get update && apt-get install -y \
     libssl1.0-dev
 
+RUN apt-get update && apt-get install -y \
+    texinfo
+
 WORKDIR /
