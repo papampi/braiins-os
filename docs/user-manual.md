@@ -51,8 +51,8 @@ If you know the MAC address of your device, mount the SD card and adjust the MAC
 ## Booting the device from SD card
 - Unmount the SD card
 - Adjust jumper to boot from SD card (instead of flash memory):
-   - [Antminer S9](s9#bootmode)
-   - [Dragon Mint T1][dm1#bootmode)
+   - [Antminer S9](s9)
+   - [Dragon Mint T1](dm1)
 - Insert it into the device and start the device. You should see a login screen shortly.
 
 
