@@ -17,4 +17,7 @@ RUN apt-get update && apt-get install -y \
 RUN apt-get update && apt-get install -y \
     python2.7
 
+RUN apt-get update && apt-get install -y \
+    libssl1.0-dev
+
 WORKDIR /
