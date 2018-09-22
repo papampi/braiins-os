@@ -14,4 +14,7 @@ RUN apt-get update && apt-get install -y \
     unzip \
     wget
 
+RUN apt-get update && apt-get install -y \
+    python2.7
+
 WORKDIR /
