@@ -77,6 +77,8 @@ for subtarget in $release_subtargets; do
 	$DRY_RUN ./bb.py --platform $platform prepare
 	$DRY_RUN ./bb.py --platform $platform prepare --update-feeds
     fi
+    # build everything for a particular platform
+    $DRY_RUN ./bb.py --platform $platform build --key $key -j$parallel_jobs -v
 
     $DRY_RUN ./bb.py --platform $platform build --key $key -j$parallel_jobs
     for i in feeds sd nand_$nand; do
