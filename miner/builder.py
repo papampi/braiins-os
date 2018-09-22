@@ -398,7 +398,7 @@ class Builder:
         # get commit time in RFC 3339 format
         commit_timestamp = repo.head.object.committed_date
         commit_time = datetime.fromtimestamp(commit_timestamp, timezone.utc)
-        fw_current = '{}_{:%Y-%m-%d}-'.format(self.FEED_FIRMWARE, commit_time)
+        fw_current = '{}_{}_{:%Y-%m-%d}-'.format(self.FEED_FIRMWARE, self._config.miner.platform, commit_time)
 
         # filter out only versions for current date
         fw_tags = (str(tag) for tag in repo.tags if str(tag).startswith(fw_current))
