@@ -8,7 +8,7 @@ It is recommended to test the hardware with an SD card image before flashing the
 # Common steps
 
 Download the latest released firmware images + signatures from:
-https://github.com/braiins/braiins-os-releases/path-to-binary-folder-with-latest-releases
+https://feeds.braiins-os.org/
 
 
 The table below outlines correspondence between firmware image archive and a particular hardware type.
@@ -19,7 +19,7 @@ The table below outlines correspondence between firmware image archive and a par
 | braiins-os-firmware_zynq-dm1-g9_*.tar.bz2 | Dragon Mint T1 with G9 control board |
 | braiins-os-firmware_zynq-dm1-g19_*.tar.bz2 | Dragon Mint T1 with G19 control board |
 
-The image can be verified by GPG:
+The image signature can be verified by GPG:
 
 ```bash
 gpg --search-keys release@braiins.cz
