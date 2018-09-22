@@ -53,7 +53,7 @@ remote:
   # list of remote repositories
   repos:
     lede:
-      uri: git@gitlab.bo:x/lede.git
+      uri: https://github.com/braiins/lede.git
     lede-packages:
       uri: git://git.openwrt.org/feed/packages.git
       branch: cd5c448758f30868770b9ebf8b656c1a4211a240
@@ -64,17 +64,17 @@ remote:
       uri: git://git.openwrt.org/feed/telephony.git
       branch: ac6415e61f147a6892fd2785337aec93ddc68fa9
     luci:
-      uri: git@gitlab.bo:x/luci.git
+      uri: https://github.com/braiins/luci.git
     miner-feeds:
-      uri: git@gitlab.bo:x/braiins-miner-feeds.git
+      uri: https://github.com/braiins/braiins-os-feeds.git
     platform:
-      uri: git@gitlab.bo:x/{target}-io-bin.git
+      uri: https://github.com/braiins/{target}-io-bin.git
     u-boot:
-      uri: git@gitlab.bo:x/u-boot-xlnx.git
+      uri: https://github.com/braiins/u-boot-xlnx.git
     linux:
-      uri: git@gitlab.bo:x/linux-xlnx.git
+      uri: https://github.com/braiins/linux-xlnx.git
     cgminer:
-      uri: git@gitlab.bo:x/cgminer.git
+      uri: https://github.com/braiins/cgminer.git
       branch: braiins-{subtarget_family}
     # it is possible to continue with any user repositories
 
