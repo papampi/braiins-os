@@ -73,8 +73,10 @@ for subtarget in $release_subtargets; do
     esac
     $DRY_RUN git checkout $tag
     # We need to ensure that feeds are update
-    $DRY_RUN ./bb.py --platform $platform prepare
-    $DRY_RUN ./bb.py --platform $platform prepare --update-feeds
+    if [ $STAGE1 = y ]; then
+	$DRY_RUN ./bb.py --platform $platform prepare
+	$DRY_RUN ./bb.py --platform $platform prepare --update-feeds
+    fi
 
     $DRY_RUN ./bb.py --platform $platform build --key $key -j$parallel_jobs
     for i in feeds sd nand_$nand; do
