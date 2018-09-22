@@ -7,4 +7,11 @@ RUN apt-get update && apt-get install -y \
     virtualenv \
     git
 
+RUN apt-get update && apt-get install -y \
+    gawk \
+    zlib1g-dev \
+    libncurses5-dev \
+    unzip \
+    wget
+
 WORKDIR /
