@@ -26,6 +26,14 @@ gpg --search-keys release@braiins.cz
 for i in ./braiins-os-firmware_*.tar.bz2; do gpg2 --verify $i.asc; done
 ```
 
+You should see something like:
+
+```
+gpg: assuming signed data in './braiins-os-firmware_zynq-am1-s9_2018-09-22-0-853643de.tar.bz2'
+gpg: Signature made Sat 22 Sep 2018 02:27:03 PM CEST using RSA key ID 616D9548
+gpg: Good signature from "Braiins Systems Release Key (Key used for signing software made by Braiins Systems) <release@braiins.cz>" [ultimate]
+```
+
 Unpack the firmware image:
 
 ```bash
@@ -109,8 +117,4 @@ Factory reset is as simple as uninstalling the the current firmware package:
 $ opkg remove firmware
 ```
 
-# Downgrade/roll back to previous version
-
-```bash
-opkg install --force-downgradable firmware
-```
+This effectively downgrades your firmware version to whatever it was when the transition to braiins OS has been done for the first time.
