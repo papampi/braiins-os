@@ -109,6 +109,32 @@ $ opkg update
 # try to upgrade to the latest firmware
 $ opkg install firmware
 ```
+
+Since the firmware installation results in reboot, the following output is expected:
+
+```
+root@MINER:~# opkg install firmware
+Upgrading firmware on root from 2018-09-22-0-853643de to 2018-09-22-1-8d9b127d...
+Downloading https://feeds.braiins-os.org/am1-s9/firmware_2018-09-22-1-8d9b127d_arm_cortex-a9_neon.ipk
+Running system upgrade...
+--2018-09-22 14:23:47--  https://feeds.braiins-os.org/am1-s9/firmware_2018-09-22-1-8d9b127d_arm_cortex-a9_neon.tar
+Resolving feeds.braiins-os.org... 104.25.97.101, 104.25.98.101, 2400:cb00:2048:1::6819:6165, ...
+Connecting to feeds.braiins-os.org|104.25.97.101|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 10373471 (9.9M) [application/octet-stream]
+Saving to: '/tmp/sysupgrade.tar'
+
+/tmp/sysupgrade.tar                     100%[==============================================================================>]   9.89M  10.7MB/s    in 0.9s
+
+2018-09-22 14:23:48 (10.7 MB/s) - '/tmp/sysupgrade.tar' saved [10373471/10373471]
+
+Collected errors:
+* opkg_conf_load: Could not lock /var/lock/opkg.lock: Resource temporarily unavailable.
+Saving config files...
+Connection to 10.33.0.166 closed by remote host.
+Connection to 10.33.0.166 closed.
+```
+
 # Factory reset
 
 Factory reset is as simple as uninstalling the the current firmware package:
