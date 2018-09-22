@@ -98,6 +98,9 @@ for subtarget in $release_subtargets; do
      generate_sd_img $fw_prefix > $pack_and_sign_script;
      echo tar cvjf $fw_archive $fw_prefix --exclude feeds --exclude sd >> $pack_and_sign_script
      echo gpg2 --armor --detach-sign --sign-with release@braiins.cz --sign ./$fw_archive >> $pack_and_sign_script
+     echo mkdir -p publish/$platform >> $pack_and_sign_script
+     echo cp $fw_prefix/feeds/\* publish/$platform >> $pack_and_sign_script
+     echo mv $fw_archive* publish >> $pack_and_sign_script
     )
 
 
