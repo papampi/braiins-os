@@ -11,6 +11,10 @@
 target=zynq
 release_subtargets=$@
 
+$DRY_RUN virtualenv --python=/usr/bin/python3.5 .env
+$DRY_RUN source .env/bin/activate
+$DRY_RUN pip3 install -r requirements.txt
+
 # Create release for all subtargets
 for subtarget in $release_subtargets; do
     platform=$target-$subtarget
