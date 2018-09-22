@@ -101,6 +101,13 @@ $ opkg update
 # try to upgrade to the latest firmware
 $ opkg install firmware
 ```
+# Factory reset
+
+Factory reset is as simple as uninstalling the the current firmware package:
+
+```bash
+$ opkg remove firmware
+```
 
 # Downgrade/roll back to previous version
 
