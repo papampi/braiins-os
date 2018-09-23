@@ -7,8 +7,7 @@ It is recommended to test the hardware with an SD card image before flashing the
 
 # Common steps
 
-Download the latest released firmware images + signatures from:
-https://feeds.braiins-os.org/
+Download the latest released firmware images + signatures from: [https://feeds.braiins-os.org/](https://feeds.braiins-os.org/)
 
 
 The table below outlines correspondence between firmware image archive and a particular hardware type.
